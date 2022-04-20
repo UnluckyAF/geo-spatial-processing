@@ -31,6 +31,7 @@ import yandex.cloud.api.vpc.v1.NetworkServiceOuterClass.CreateNetworkMetadata;
 import yandex.cloud.api.vpc.v1.NetworkServiceOuterClass.DeleteNetworkRequest;
 import yandex.cloud.api.vpc.v1.NetworkServiceOuterClass.ListNetworkSubnetsRequest;
 import yandex.cloud.api.vpc.v1.NetworkServiceOuterClass.ListNetworkSubnetsResponse;
+import yandex.cloud.api.vpc.v1.SubnetOuterClass.Subnet;
 import yandex.cloud.api.vpc.v1.SubnetServiceGrpc;
 import yandex.cloud.api.vpc.v1.SubnetServiceGrpc.SubnetServiceBlockingStub;
 import yandex.cloud.api.vpc.v1.SubnetServiceOuterClass.CreateSubnetMetadata;
@@ -49,14 +50,13 @@ import java.util.Map;
  */
 public final class App {
     private static final String MY_YC_FOLDER_ID = "b1ga6r1fob64eg80duhg";
-    private static final String MY_YC_CENTRAL1_B_SUBNET_ID = "<subnet-id>";
     private static final String YC_STANDARD_IMAGES = "standard-images";
     private static final String YC_UBUNTU_IMAGE_FAMILY = "ubuntu-1804";
 
     private App() {
     }
 
-    public static void setupNet(ServiceFactory factory, String networkName) throws Exception {
+    public static void setupNet(ServiceFactory factory, String networkName, Map<Zone, String> zoneToCidr) throws Exception {
         NetworkServiceBlockingStub networkService = factory.create(NetworkServiceBlockingStub.class, NetworkServiceGrpc::newBlockingStub);
         SubnetServiceBlockingStub subnetService = factory.create(SubnetServiceBlockingStub.class, SubnetServiceGrpc::newBlockingStub);
         OperationServiceBlockingStub operationService = factory.create(OperationServiceBlockingStub.class, OperationServiceGrpc::newBlockingStub);
@@ -71,10 +71,10 @@ public final class App {
         System.out.println(String.format("Created network with id %s", networkId));
 
         // IPv4 CIDR for every availability zone
-        Map<Zone, String> zoneToCidr = new HashMap<>();
-        zoneToCidr.put(Zone.RU_CENTRAL1_A, "192.168.0.0/24");
-        zoneToCidr.put(Zone.RU_CENTRAL1_B, "192.168.1.0/24");
-        zoneToCidr.put(Zone.RU_CENTRAL1_C, "192.168.2.0/24");
+        // Map<Zone, String> zoneToCidr = new HashMap<>();
+        // zoneToCidr.put(Zone.RU_CENTRAL1_A, commonCidr);
+        // zoneToCidr.put(Zone.RU_CENTRAL1_B, commonCidr); // "192.168.1.0/24"
+        // zoneToCidr.put(Zone.RU_CENTRAL1_C, commonCidr);
 
         // Create subnets in all 3 availability zones
         List<Operation> createSubnetOperations = new ArrayList<>();
@@ -116,7 +116,6 @@ public final class App {
         OperationUtils.wait(operationService, deleteOperation, Duration.ofMinutes(1));
         System.out.println(String.format("Deleted network %s", networkId));
     }
-    public static void main(String[] args) {
 
     private static CreateNetworkRequest buildCreateNetworkRequest(String networkName) {
         if (networkName.length() == 0) {
@@ -154,6 +153,87 @@ public final class App {
         return DeleteNetworkRequest.newBuilder()
                 .setNetworkId(networkId)
                 .build();
+    }
+
+    public static void setupInstances(ServiceFactory factory, int instancesNum, String networkId, String[] zones, long memory, long disk) {
+        // Configuration
+        InstanceServiceBlockingStub instanceService = factory.create(InstanceServiceBlockingStub.class, InstanceServiceGrpc::newBlockingStub);
+        OperationServiceBlockingStub operationService = factory.create(OperationServiceBlockingStub.class, OperationServiceGrpc::newBlockingStub);
+        ImageServiceBlockingStub imageService = factory.create(ImageServiceBlockingStub.class, ImageServiceGrpc::newBlockingStub);
+
+        // Get latest Ubuntu 18 image
+        Image image = imageService.getLatestByFamily(buildGetLatestByFamilyRequest());
+
+        NetworkServiceBlockingStub networkService = factory.create(NetworkServiceBlockingStub.class, NetworkServiceGrpc::newBlockingStub);
+        ListNetworkSubnetsResponse subnets = networkService.listSubnets(buildListNetworkSubnetsRequest(networkId));
+        Map<String, Subnet> zoneToSubnet = new HashMap<>();
+        for (Subnet subnet : subnets.getSubnetsList()) {
+            zoneToSubnet.put(subnet.getZoneId(), subnet);
+        }
+        List<Subnet> subnetsList = subnets.getSubnetsList();
+        int zone_ind = 0;
+        for (int i = 0; i < instancesNum; i++, zone_ind = (zone_ind + 1) % zones.length) {
+            // Create instance
+            Subnet subnet = zoneToSubnet.get(zones[zone_ind]);
+            Operation createOperation = instanceService.create(buildCreateInstanceRequest(image.getId(), subnet.getZoneId(), subnet.getId(), memory, disk));
+            System.out.println("Create instance request sent");
+
+            // Wait for instance creation
+            String instanceId = createOperation.getMetadata().unpack(CreateInstanceMetadata.class).getInstanceId();
+            OperationUtils.wait(operationService, createOperation, Duration.ofMinutes(5));
+            System.out.println(String.format("Created with id %s", instanceId));
+        }
+    }
+
+    public static void deleteInstances(ServiceFactory factory) {
+        InstanceServiceBlockingStub instanceService = factory.create(InstanceServiceBlockingStub.class, InstanceServiceGrpc::newBlockingStub);
+        OperationServiceBlockingStub operationService = factory.create(OperationServiceBlockingStub.class, OperationServiceGrpc::newBlockingStub);
+        // List instances in the folder
+        List<Instance> instances = instanceService.list(buildListInstancesRequest()).getInstancesList();
+        instances.forEach(System.out::println);
+        System.out.println("Listed instances");
+
+        for (Instance instance : instances) {
+            // Delete created instance
+            Operation deleteOperation = instanceService.delete(buildDeleteInstanceRequest(instance.getId()));
+            System.out.println("Delete instance request sent");
+
+            // Wait for instance deletion
+            OperationUtils.wait(operationService, deleteOperation, Duration.ofMinutes(1));
+            System.out.println(String.format("Deleted instance %s", instance.getId()));
+        }
+    }
+
+    private static GetImageLatestByFamilyRequest buildGetLatestByFamilyRequest() {
+        return GetImageLatestByFamilyRequest.newBuilder()
+                .setFolderId(YC_STANDARD_IMAGES)
+                .setFamily(YC_UBUNTU_IMAGE_FAMILY)
+                .build();
+    }
+
+    private static CreateInstanceRequest buildCreateInstanceRequest(String imageId, String zoneId, String subnetId, long memory, long disk) { // Gb
+        return CreateInstanceRequest.newBuilder()
+                .setFolderId(MY_YC_FOLDER_ID)
+                .setName("ubuntu")
+                .setZoneId(zoneId)
+                .setPlatformId(Platform.STANDARD_V2.getId())
+                .setResourcesSpec(ResourcesSpec.newBuilder().setCores(1).setCoreFraction(5).setMemory(memory * 1024 * 1024 * 1024))
+                .setBootDiskSpec(AttachedDiskSpec.newBuilder()
+                        .setDiskSpec(DiskSpec.newBuilder()
+                                .setImageId(imageId)
+                                .setSize(disk * 1024 * 1024 * 1024)))
+                .addNetworkInterfaceSpecs(NetworkInterfaceSpec.newBuilder()
+                        .setSubnetId(subnetId)
+                        .setPrimaryV4AddressSpec(PrimaryAddressSpec.getDefaultInstance())
+                ).build();
+    }
+
+    private static ListInstancesRequest buildListInstancesRequest() {
+        return ListInstancesRequest.newBuilder().setFolderId(MY_YC_FOLDER_ID).build();
+    }
+
+    private static DeleteInstanceRequest buildDeleteInstanceRequest(String instanceId) {
+        return DeleteInstanceRequest.newBuilder().setInstanceId(instanceId).build();
     }
 
     /**
