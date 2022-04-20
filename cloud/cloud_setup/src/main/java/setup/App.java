@@ -56,12 +56,7 @@ public final class App {
     private App() {
     }
 
-    public static void setupNet(String networkName) throws Exception {
-        // Configuration
-        ServiceFactory factory = ServiceFactory.builder()
-                .credentialProvider(Auth.oauthTokenBuilder().fromEnv("YC_OAUTH"))
-                .requestTimeout(Duration.ofMinutes(1))
-                .build();
+    public static void setupNet(ServiceFactory factory, String networkName) throws Exception {
         NetworkServiceBlockingStub networkService = factory.create(NetworkServiceBlockingStub.class, NetworkServiceGrpc::newBlockingStub);
         SubnetServiceBlockingStub subnetService = factory.create(SubnetServiceBlockingStub.class, SubnetServiceGrpc::newBlockingStub);
         OperationServiceBlockingStub operationService = factory.create(OperationServiceBlockingStub.class, OperationServiceGrpc::newBlockingStub);
@@ -94,7 +89,10 @@ public final class App {
         }
     }
 
-    public static void deleteNet(String[] args) throws Exception {
+    public static void deleteNet(ServiceFactory factory, String networkId) throws Exception {
+        NetworkServiceBlockingStub networkService = factory.create(NetworkServiceBlockingStub.class, NetworkServiceGrpc::newBlockingStub);
+        SubnetServiceBlockingStub subnetService = factory.create(SubnetServiceBlockingStub.class, SubnetServiceGrpc::newBlockingStub);
+        OperationServiceBlockingStub operationService = factory.create(OperationServiceBlockingStub.class, OperationServiceGrpc::newBlockingStub);
         // List subnets in created network
         ListNetworkSubnetsResponse subnets = networkService.listSubnets(buildListNetworkSubnetsRequest(networkId));
 
@@ -118,6 +116,7 @@ public final class App {
         OperationUtils.wait(operationService, deleteOperation, Duration.ofMinutes(1));
         System.out.println(String.format("Deleted network %s", networkId));
     }
+    public static void main(String[] args) {
 
     private static CreateNetworkRequest buildCreateNetworkRequest(String networkName) {
         if (networkName.length() == 0) {
@@ -162,6 +161,11 @@ public final class App {
      * @param args The arguments of the program.
      */
     public static void main(String[] args) {
+        // Configuration
+        ServiceFactory factory = ServiceFactory.builder()
+                .credentialProvider(Auth.oauthTokenBuilder().fromEnv("YC_OAUTH"))
+                .requestTimeout(Duration.ofMinutes(1))
+                .build();
         System.out.println("Hello World!");
     }
 }
