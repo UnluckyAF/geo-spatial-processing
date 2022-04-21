@@ -24,6 +24,7 @@ import yandex.cloud.sdk.Platform;
 import yandex.cloud.sdk.ServiceFactory;
 import yandex.cloud.sdk.Zone;
 import yandex.cloud.sdk.auth.Auth;
+import yandex.cloud.sdk.utils.OperationTimeoutException;
 import yandex.cloud.sdk.utils.OperationUtils;
 import yandex.cloud.api.vpc.v1.NetworkServiceGrpc;
 import yandex.cloud.api.vpc.v1.NetworkServiceGrpc.NetworkServiceBlockingStub;
@@ -39,11 +40,15 @@ import yandex.cloud.api.vpc.v1.SubnetServiceOuterClass.CreateSubnetRequest;
 import yandex.cloud.api.vpc.v1.SubnetServiceOuterClass.DeleteSubnetMetadata;
 import yandex.cloud.api.vpc.v1.SubnetServiceOuterClass.DeleteSubnetRequest;
 
+import org.apache.commons.cli.*;
+
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import com.google.protobuf.InvalidProtocolBufferException;
 
 /**
  * Hello world!
@@ -56,7 +61,7 @@ public final class App {
     private App() {
     }
 
-    public static void setupNet(ServiceFactory factory, String networkName, Map<Zone, String> zoneToCidr) throws Exception {
+    public static String setupNet(ServiceFactory factory, String networkName, Map<Zone, String> zoneToCidr) throws Exception {
         NetworkServiceBlockingStub networkService = factory.create(NetworkServiceBlockingStub.class, NetworkServiceGrpc::newBlockingStub);
         SubnetServiceBlockingStub subnetService = factory.create(SubnetServiceBlockingStub.class, SubnetServiceGrpc::newBlockingStub);
         OperationServiceBlockingStub operationService = factory.create(OperationServiceBlockingStub.class, OperationServiceGrpc::newBlockingStub);
@@ -70,12 +75,6 @@ public final class App {
         OperationUtils.wait(operationService, createOperation, Duration.ofMinutes(1));
         System.out.println(String.format("Created network with id %s", networkId));
 
-        // IPv4 CIDR for every availability zone
-        // Map<Zone, String> zoneToCidr = new HashMap<>();
-        // zoneToCidr.put(Zone.RU_CENTRAL1_A, commonCidr);
-        // zoneToCidr.put(Zone.RU_CENTRAL1_B, commonCidr); // "192.168.1.0/24"
-        // zoneToCidr.put(Zone.RU_CENTRAL1_C, commonCidr);
-
         // Create subnets in all 3 availability zones
         List<Operation> createSubnetOperations = new ArrayList<>();
         zoneToCidr.forEach((zone, cidr) ->
@@ -87,6 +86,7 @@ public final class App {
             OperationUtils.wait(operationService, operation, Duration.ofMinutes(1));
             System.out.println(String.format("Created subnet %s", subnetId));
         }
+        return networkId;
     }
 
     public static void deleteNet(ServiceFactory factory, String networkId) throws Exception {
@@ -170,17 +170,29 @@ public final class App {
         for (Subnet subnet : subnets.getSubnetsList()) {
             zoneToSubnet.put(subnet.getZoneId(), subnet);
         }
-        List<Subnet> subnetsList = subnets.getSubnetsList();
         int zone_ind = 0;
         for (int i = 0; i < instancesNum; i++, zone_ind = (zone_ind + 1) % zones.length) {
             // Create instance
             Subnet subnet = zoneToSubnet.get(zones[zone_ind]);
-            Operation createOperation = instanceService.create(buildCreateInstanceRequest(image.getId(), subnet.getZoneId(), subnet.getId(), memory, disk));
+            Operation createOperation = instanceService.create(buildCreateInstanceRequest(image.getId(), i, subnet.getZoneId(), subnet.getId(), memory, disk));
             System.out.println("Create instance request sent");
 
             // Wait for instance creation
-            String instanceId = createOperation.getMetadata().unpack(CreateInstanceMetadata.class).getInstanceId();
-            OperationUtils.wait(operationService, createOperation, Duration.ofMinutes(5));
+            String instanceId = "";
+            try {
+                instanceId = createOperation.getMetadata().unpack(CreateInstanceMetadata.class).getInstanceId();
+            } catch (InvalidProtocolBufferException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+                System.exit(1);
+            }
+            try {
+                OperationUtils.wait(operationService, createOperation, Duration.ofMinutes(5));
+            } catch (OperationTimeoutException | InterruptedException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+                System.exit(1);
+            }
             System.out.println(String.format("Created with id %s", instanceId));
         }
     }
@@ -199,7 +211,12 @@ public final class App {
             System.out.println("Delete instance request sent");
 
             // Wait for instance deletion
-            OperationUtils.wait(operationService, deleteOperation, Duration.ofMinutes(1));
+            try {
+                OperationUtils.wait(operationService, deleteOperation, Duration.ofMinutes(1));
+            } catch (OperationTimeoutException | InterruptedException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            }
             System.out.println(String.format("Deleted instance %s", instance.getId()));
         }
     }
@@ -211,13 +228,13 @@ public final class App {
                 .build();
     }
 
-    private static CreateInstanceRequest buildCreateInstanceRequest(String imageId, String zoneId, String subnetId, long memory, long disk) { // Gb
+    private static CreateInstanceRequest buildCreateInstanceRequest(String imageId, int num, String zoneId, String subnetId, long memory, long disk) { // Gb
         return CreateInstanceRequest.newBuilder()
                 .setFolderId(MY_YC_FOLDER_ID)
-                .setName("ubuntu")
+                .setName("ubuntu" + String.valueOf(num))
                 .setZoneId(zoneId)
                 .setPlatformId(Platform.STANDARD_V2.getId())
-                .setResourcesSpec(ResourcesSpec.newBuilder().setCores(1).setCoreFraction(5).setMemory(memory * 1024 * 1024 * 1024))
+                .setResourcesSpec(ResourcesSpec.newBuilder().setCores(2).setCoreFraction(5).setMemory(memory * 1024 * 1024 * 1024))
                 .setBootDiskSpec(AttachedDiskSpec.newBuilder()
                         .setDiskSpec(DiskSpec.newBuilder()
                                 .setImageId(imageId)
@@ -241,11 +258,101 @@ public final class App {
      * @param args The arguments of the program.
      */
     public static void main(String[] args) {
+        Options options = new Options();
+
+        Option action = new Option("a", "action", true, "action to do");
+        action.setRequired(true);
+        options.addOption(action);
+
+        Option networkName = new Option("n", "network", true, "network name");
+        options.addOption(networkName);
+        Option cidr = new Option("c", "cidr", true, "subnet cidr");
+        options.addOption(cidr);
+        Option instances = new Option("i", "instances", true, "instances number");
+        options.addOption(instances);
+        Option zones = new Option("z", "zones", true, "zone names");
+        options.addOption(zones);
+        Option memory = new Option("m", "memory", true, "memory amount");
+        options.addOption(memory);
+        Option disk = new Option("d", "disk", true, "disk space");
+        options.addOption(disk);
+        Option networkIdOption = new Option("network_id", true, "network id");
+        options.addOption(networkIdOption);
+
+        CommandLineParser parser = new DefaultParser();
+        CommandLine cmd = null;
+        try {
+            cmd = parser.parse(options, args);
+        } catch (ParseException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+            System.exit(1);
+        }
+
+        String actionString = cmd.getOptionValue("action");
+        String network = "network1";
+        if (cmd.hasOption("network")) {
+            network = cmd.getOptionValue("network");
+        }
+        String[] cidrString = {"192.168.0.0/24", "192.168.1.0/24", "192.168.2.0/24"};
+        if (cmd.hasOption("cidr")) {
+            cidrString = cmd.getOptionValues("cidr");
+        }
+        String instancesNum = "3";
+        if (cmd.hasOption("instances")) {
+            instancesNum = cmd.getOptionValue("instances");
+        }
+        String[] zonesStrings = {Zone.RU_CENTRAL1_A.getId()};
+        if (cmd.hasOption("zones")) {
+            zonesStrings = cmd.getOptionValues("zone");
+        }
+        String memoryString = "1";
+        if (cmd.hasOption("memory")) {
+            memoryString = cmd.getOptionValue("memory");
+        }
+        String diskString = "10";
+        if (cmd.hasOption("disk")) {
+            diskString = cmd.getOptionValue("disk");
+        }
+        String networkId = cmd.getOptionValue("network_id");
+
         // Configuration
         ServiceFactory factory = ServiceFactory.builder()
                 .credentialProvider(Auth.oauthTokenBuilder().fromEnv("YC_OAUTH"))
                 .requestTimeout(Duration.ofMinutes(1))
                 .build();
         System.out.println("Hello World!");
+
+        switch (actionString) {
+            case ("setup"):
+                // IPv4 CIDR for every availability zone
+                Map<Zone, String> zoneToCidr = new HashMap<>();
+                zoneToCidr.put(Zone.RU_CENTRAL1_A, cidrString[0]);
+                zoneToCidr.put(Zone.RU_CENTRAL1_B, cidrString[1]);
+                zoneToCidr.put(Zone.RU_CENTRAL1_C, cidrString[2]);
+
+                try {
+                    networkId = setupNet(factory, network, zoneToCidr);
+                } catch (Exception e) {
+                    // TODO Auto-generated catch block
+                    e.printStackTrace();
+                }
+                setupInstances(factory, Integer.parseInt(instancesNum), networkId, zonesStrings, Integer.parseInt(memoryString), Integer.parseInt(diskString));
+                break;
+            case ("delete"):
+                if (networkId == null) {
+                    System.err.println("No network id provided");
+                    System.exit(1);
+                }
+
+                deleteInstances(factory);
+                try {
+                    deleteNet(factory, networkId);
+                } catch (Exception e) {
+                    // TODO Auto-generated catch block
+                    e.printStackTrace();
+                }
+        }
+        System.out.println("Finish");
     }
 }
