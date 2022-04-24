@@ -1,30 +1,12 @@
 package setup;
 
-import yandex.cloud.api.compute.v1.ImageOuterClass.Image;
-import yandex.cloud.api.compute.v1.ImageServiceGrpc;
-import yandex.cloud.api.compute.v1.ImageServiceGrpc.ImageServiceBlockingStub;
-import yandex.cloud.api.compute.v1.ImageServiceOuterClass.GetImageLatestByFamilyRequest;
-import yandex.cloud.api.compute.v1.InstanceOuterClass.Instance;
-import yandex.cloud.api.compute.v1.InstanceServiceGrpc;
-import yandex.cloud.api.compute.v1.InstanceServiceGrpc.InstanceServiceBlockingStub;
-import yandex.cloud.api.compute.v1.InstanceServiceOuterClass.AttachedDiskSpec;
-import yandex.cloud.api.compute.v1.InstanceServiceOuterClass.AttachedDiskSpec.DiskSpec;
-import yandex.cloud.api.compute.v1.InstanceServiceOuterClass.CreateInstanceMetadata;
-import yandex.cloud.api.compute.v1.InstanceServiceOuterClass.CreateInstanceRequest;
-import yandex.cloud.api.compute.v1.InstanceServiceOuterClass.DeleteInstanceRequest;
-import yandex.cloud.api.compute.v1.InstanceServiceOuterClass.ListInstancesRequest;
-import yandex.cloud.api.compute.v1.InstanceServiceOuterClass.NetworkInterfaceSpec;
-import yandex.cloud.api.compute.v1.InstanceServiceOuterClass.PrimaryAddressSpec;
-import yandex.cloud.api.compute.v1.InstanceServiceOuterClass.ResourcesSpec;
 import yandex.cloud.api.operation.OperationOuterClass.Operation;
 import yandex.cloud.api.operation.OperationServiceGrpc;
 import yandex.cloud.api.operation.OperationServiceGrpc.OperationServiceBlockingStub;
 import yandex.cloud.api.vpc.v1.NetworkServiceOuterClass.CreateNetworkRequest;
-import yandex.cloud.sdk.Platform;
 import yandex.cloud.sdk.ServiceFactory;
 import yandex.cloud.sdk.Zone;
 import yandex.cloud.sdk.auth.Auth;
-import yandex.cloud.sdk.utils.OperationTimeoutException;
 import yandex.cloud.sdk.utils.OperationUtils;
 import yandex.cloud.api.vpc.v1.NetworkServiceGrpc;
 import yandex.cloud.api.vpc.v1.NetworkServiceGrpc.NetworkServiceBlockingStub;
@@ -32,7 +14,6 @@ import yandex.cloud.api.vpc.v1.NetworkServiceOuterClass.CreateNetworkMetadata;
 import yandex.cloud.api.vpc.v1.NetworkServiceOuterClass.DeleteNetworkRequest;
 import yandex.cloud.api.vpc.v1.NetworkServiceOuterClass.ListNetworkSubnetsRequest;
 import yandex.cloud.api.vpc.v1.NetworkServiceOuterClass.ListNetworkSubnetsResponse;
-import yandex.cloud.api.vpc.v1.SubnetOuterClass.Subnet;
 import yandex.cloud.api.vpc.v1.SubnetServiceGrpc;
 import yandex.cloud.api.vpc.v1.SubnetServiceGrpc.SubnetServiceBlockingStub;
 import yandex.cloud.api.vpc.v1.SubnetServiceOuterClass.CreateSubnetMetadata;
@@ -47,8 +28,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import com.google.protobuf.InvalidProtocolBufferException;
 
 /**
  * Hello world!
@@ -154,105 +133,6 @@ public final class App {
                 .setNetworkId(networkId)
                 .build();
     }
-
-    public static void setupInstances(ServiceFactory factory, int instancesNum, String networkId, String[] zones, long memory, long disk) {
-        // Configuration
-        InstanceServiceBlockingStub instanceService = factory.create(InstanceServiceBlockingStub.class, InstanceServiceGrpc::newBlockingStub);
-        OperationServiceBlockingStub operationService = factory.create(OperationServiceBlockingStub.class, OperationServiceGrpc::newBlockingStub);
-        ImageServiceBlockingStub imageService = factory.create(ImageServiceBlockingStub.class, ImageServiceGrpc::newBlockingStub);
-
-        // Get latest Ubuntu 18 image
-        Image image = imageService.getLatestByFamily(buildGetLatestByFamilyRequest());
-
-        NetworkServiceBlockingStub networkService = factory.create(NetworkServiceBlockingStub.class, NetworkServiceGrpc::newBlockingStub);
-        ListNetworkSubnetsResponse subnets = networkService.listSubnets(buildListNetworkSubnetsRequest(networkId));
-        Map<String, Subnet> zoneToSubnet = new HashMap<>();
-        for (Subnet subnet : subnets.getSubnetsList()) {
-            zoneToSubnet.put(subnet.getZoneId(), subnet);
-        }
-        int zone_ind = 0;
-        for (int i = 0; i < instancesNum; i++, zone_ind = (zone_ind + 1) % zones.length) {
-            // Create instance
-            Subnet subnet = zoneToSubnet.get(zones[zone_ind]);
-            Operation createOperation = instanceService.create(buildCreateInstanceRequest(image.getId(), i, subnet.getZoneId(), subnet.getId(), memory, disk));
-            System.out.println("Create instance request sent");
-
-            // Wait for instance creation
-            String instanceId = "";
-            try {
-                instanceId = createOperation.getMetadata().unpack(CreateInstanceMetadata.class).getInstanceId();
-            } catch (InvalidProtocolBufferException e) {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
-                System.exit(1);
-            }
-            try {
-                OperationUtils.wait(operationService, createOperation, Duration.ofMinutes(5));
-            } catch (OperationTimeoutException | InterruptedException e) {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
-                System.exit(1);
-            }
-            System.out.println(String.format("Created with id %s", instanceId));
-        }
-    }
-
-    public static void deleteInstances(ServiceFactory factory) {
-        InstanceServiceBlockingStub instanceService = factory.create(InstanceServiceBlockingStub.class, InstanceServiceGrpc::newBlockingStub);
-        OperationServiceBlockingStub operationService = factory.create(OperationServiceBlockingStub.class, OperationServiceGrpc::newBlockingStub);
-        // List instances in the folder
-        List<Instance> instances = instanceService.list(buildListInstancesRequest()).getInstancesList();
-        instances.forEach(System.out::println);
-        System.out.println("Listed instances");
-
-        for (Instance instance : instances) {
-            // Delete created instance
-            Operation deleteOperation = instanceService.delete(buildDeleteInstanceRequest(instance.getId()));
-            System.out.println("Delete instance request sent");
-
-            // Wait for instance deletion
-            try {
-                OperationUtils.wait(operationService, deleteOperation, Duration.ofMinutes(1));
-            } catch (OperationTimeoutException | InterruptedException e) {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
-            }
-            System.out.println(String.format("Deleted instance %s", instance.getId()));
-        }
-    }
-
-    private static GetImageLatestByFamilyRequest buildGetLatestByFamilyRequest() {
-        return GetImageLatestByFamilyRequest.newBuilder()
-                .setFolderId(YC_STANDARD_IMAGES)
-                .setFamily(YC_UBUNTU_IMAGE_FAMILY)
-                .build();
-    }
-
-    private static CreateInstanceRequest buildCreateInstanceRequest(String imageId, int num, String zoneId, String subnetId, long memory, long disk) { // Gb
-        return CreateInstanceRequest.newBuilder()
-                .setFolderId(MY_YC_FOLDER_ID)
-                .setName("ubuntu" + String.valueOf(num))
-                .setZoneId(zoneId)
-                .setPlatformId(Platform.STANDARD_V2.getId())
-                .setResourcesSpec(ResourcesSpec.newBuilder().setCores(2).setCoreFraction(5).setMemory(memory * 1024 * 1024 * 1024))
-                .setBootDiskSpec(AttachedDiskSpec.newBuilder()
-                        .setDiskSpec(DiskSpec.newBuilder()
-                                .setImageId(imageId)
-                                .setSize(disk * 1024 * 1024 * 1024)))
-                .addNetworkInterfaceSpecs(NetworkInterfaceSpec.newBuilder()
-                        .setSubnetId(subnetId)
-                        .setPrimaryV4AddressSpec(PrimaryAddressSpec.getDefaultInstance())
-                ).build();
-    }
-
-    private static ListInstancesRequest buildListInstancesRequest() {
-        return ListInstancesRequest.newBuilder().setFolderId(MY_YC_FOLDER_ID).build();
-    }
-
-    private static DeleteInstanceRequest buildDeleteInstanceRequest(String instanceId) {
-        return DeleteInstanceRequest.newBuilder().setInstanceId(instanceId).build();
-    }
-
     /**
      * Says hello to the world.
      * @param args The arguments of the program.
@@ -278,6 +158,12 @@ public final class App {
         options.addOption(disk);
         Option networkIdOption = new Option("network_id", true, "network id");
         options.addOption(networkIdOption);
+        Option imageIdOption = new Option("image_id", true, "id of image for instance to use");
+        options.addOption(imageIdOption);
+        Option imageFamilyOption = new Option("image_family", true, "name of the family for the image which is going to be created");
+        options.addOption(imageFamilyOption);
+        Option imageDiskIdOption = new Option("image_disk",  true, "disk id of disk from which image is going to be created");
+        options.addOption(imageDiskIdOption);
 
         CommandLineParser parser = new DefaultParser();
         CommandLine cmd = null;
@@ -315,6 +201,12 @@ public final class App {
             diskString = cmd.getOptionValue("disk");
         }
         String networkId = cmd.getOptionValue("network_id");
+        String imageId = cmd.getOptionValue("image_id");
+        String imageDiskId = cmd.getOptionValue("image_disk");
+        String imageFamily = "my-family";
+        if (cmd.hasOption("image_family")) {
+            imageFamily = cmd.getOptionValue("image_family");
+        }
 
         // Configuration
         ServiceFactory factory = ServiceFactory.builder()
@@ -323,6 +215,7 @@ public final class App {
                 .build();
         System.out.println("Hello World!");
 
+        Instances inst = new Instances(MY_YC_FOLDER_ID, YC_STANDARD_IMAGES, YC_UBUNTU_IMAGE_FAMILY);
         switch (actionString) {
             case ("setup"):
                 // IPv4 CIDR for every availability zone
@@ -337,7 +230,7 @@ public final class App {
                     // TODO Auto-generated catch block
                     e.printStackTrace();
                 }
-                setupInstances(factory, Integer.parseInt(instancesNum), networkId, zonesStrings, Integer.parseInt(memoryString), Integer.parseInt(diskString));
+                inst.setupInstances(factory, Integer.parseInt(instancesNum), networkId, imageId, zonesStrings, Integer.parseInt(memoryString), Integer.parseInt(diskString));
                 break;
             case ("delete"):
                 if (networkId == null) {
@@ -345,13 +238,20 @@ public final class App {
                     System.exit(1);
                 }
 
-                deleteInstances(factory);
+                inst.deleteInstances(factory);
                 try {
                     deleteNet(factory, networkId);
                 } catch (Exception e) {
                     // TODO Auto-generated catch block
                     e.printStackTrace();
                 }
+                break;
+            case ("create"):
+                inst.createImage(factory, imageFamily, imageDiskId);
+                break;
+            default:
+                System.out.println("Unknown action");
+
         }
         System.out.println("Finish");
     }
