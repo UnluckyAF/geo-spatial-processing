@@ -11,7 +11,7 @@ object Spark {
     .setAppName("MyProject")
     .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
     .set("spark.kryo.registrator", "geotrellis.spark.store.kryo.KryoRegistrator")
-    .set("spark.executionEnv.AWS_PROFILE", Properties.envOrElse("AWS_PROFILE", "default"))
+    // .set("spark.executionEnv.AWS_PROFILE", Properties.envOrElse("AWS_PROFILE", "default"))
 
   implicit val session: SparkSession = SparkSession.builder.config(conf).enableHiveSupport.getOrCreate
   implicit def context: SparkContext = session.sparkContext

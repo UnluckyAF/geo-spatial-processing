@@ -4,11 +4,19 @@ import geotrellis.layer._
 import geotrellis.vector._
 import geotrellis.proj4._
 import geotrellis.raster._
+import geotrellis.spark.store.hadoop._
+import org.apache.hadoop.fs.Path
 import geotrellis.raster.resample._
 import geotrellis.raster.io.geotiff.reader.GeoTiffReader
 import geotrellis.raster.io.geotiff.writer.GeoTiffWriter
 import geotrellis.raster.io.geotiff._
 import geotrellis.spark._
+import geotrellis.layer.{SpatialKey, SpaceTimeKey, FloatingLayoutScheme}
+import geotrellis.spark.store._
+import geotrellis.spark.tiling.Tiler
+import geotrellis.vector._
+import org.apache.spark.HashPartitioner
+import org.apache.spark.rdd.RDD
 
 import cats.implicits._
 import com.monovore.decline._
@@ -50,17 +58,64 @@ object  Main {
 
   def run(inputs: List[String], output: String, numPartitions: Option[Int])(implicit sc: SparkContext): Unit = {
     val path: String = inputs.head
-    val geoTiff: SinglebandGeoTiff = GeoTiffReader.readSingleband(path)
-    val newGeoTiff: SinglebandGeoTiff = geoTiff.crop(4220, 4220, 4270, 4270)
-    GeoTiffWriter.write(newGeoTiff, output)
+    val pth = new Path(path)
+    val inputRdd: RDD[(ProjectedExtent, Tile)] =
+    sc.hadoopGeoTiffRDD(pth)
 
-    val resampleRasterExtent: RasterExtent = RasterExtent(
-      geoTiff.extent,
-      1000,
-      1000
-    )
-    val resampled: SinglebandRaster = geoTiff.resample(resampleRasterExtent, Average, AutoHigherResolution)
-    val anotherGeoTiff: SinglebandGeoTiff = SinglebandGeoTiff(resampled.tile, resampled.extent, geoTiff.crs, geoTiff.tags, geoTiff.options, geoTiff.overviews)
-    GeoTiffWriter.write(anotherGeoTiff, output + "2")
+    val layoutScheme = FloatingLayoutScheme(512)
+
+    val (_: Int, metadata: TileLayerMetadata[SpatialKey]) =
+      inputRdd.collectMetadata[SpatialKey](layoutScheme)
+
+    val tilerOptions =
+      Tiler.Options(
+        resampleMethod = Average,
+        partitioner = new HashPartitioner(inputRdd.partitions.length)
+      )
+
+    val tiledRdd =
+      inputRdd.tileToLayout[SpatialKey](metadata, tilerOptions)
+
+
+    // At this point, we want to combine our RDD and our Metadata to get a TileLayerRDD[SpatialKey]
+
+    val layerRdd: TileLayerRDD[SpatialKey] =
+      ContextRDD(tiledRdd, metadata)
+
+    val areaOfInterest: Extent = Extent(300000.000, 6000000.000, 500000.000, 6100000.000)
+
+    val cropedRDD = layerRdd.crop(areaOfInterest)
+    val stitched = cropedRDD.stitch()
+
+    val geotiff = GeoTiff(stitched, cropedRDD.metadata.crs)
+    val pathHadoop = new Path(output + "_spark")
+    geotiff.write(pathHadoop, cropedRDD.sparkContext.hadoopConfiguration)
+
+
+    // val geoTiff: SinglebandGeoTiff = GeoTiffReader.readSingleband(path)
+    // val newGeoTiff: SinglebandGeoTiff = geoTiff.crop(4220, 4220, 4270, 4270)
+    // GeoTiffWriter.write(newGeoTiff, output)
+
+    // val resampleRasterExtent: RasterExtent = RasterExtent(
+    //   geoTiff.extent,
+    //   1000,
+    //   1000
+    // )
+    // val resampled: SinglebandRaster = geoTiff.resample(resampleRasterExtent, Average, AutoHigherResolution)
+    // val anotherGeoTiff: SinglebandGeoTiff = SinglebandGeoTiff(resampled.tile, resampled.extent, geoTiff.crs, geoTiff.tags, geoTiff.options, geoTiff.overviews)
+    // GeoTiffWriter.write(anotherGeoTiff, output + "2")
+
+    // val sumTiff: SinglebandGeoTiff = geoTiff + anotherGeoTiff
+    // GeoTiffWriter.write(sumTiff, output + "3")
+    // Console.println(geoTiff.extent)
+    // val resampleRasterExtent: RasterExtent = RasterExtent(
+    //   geoTiff.extent,
+    //   1000,
+    //   1000
+    // )
+    // val resampled: SinglebandRaster = geoTiff.resample(resampleRasterExtent, Average, AutoHigherResolution)
+    // val anotherGeoTiff: SinglebandGeoTiff = SinglebandGeoTiff(resampled.tile, resampled.extent, geoTiff.crs, geoTiff.tags, geoTiff.options, geoTiff.overviews)
+    // GeoTiffWriter.write(anotherGeoTiff, output + "2")
+
   }
 }
