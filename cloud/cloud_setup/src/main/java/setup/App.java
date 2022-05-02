@@ -158,12 +158,18 @@ public final class App {
         options.addOption(disk);
         Option networkIdOption = new Option("network_id", true, "network id");
         options.addOption(networkIdOption);
+
         Option imageIdOption = new Option("image_id", true, "id of image for instance to use");
         options.addOption(imageIdOption);
         Option imageFamilyOption = new Option("image_family", true, "name of the family for the image which is going to be created");
         options.addOption(imageFamilyOption);
         Option imageDiskIdOption = new Option("image_disk",  true, "disk id of disk from which image is going to be created");
         options.addOption(imageDiskIdOption);
+
+        Option withVpnOption = new Option("v", "with_vpn",  false, "create addtitional vpn instance");
+        options.addOption(withVpnOption);
+        Option vpnZoneOption = new Option("vzone", "vpn_zone",  true, "subnet zone of vpn instance");
+        options.addOption(vpnZoneOption);
 
         CommandLineParser parser = new DefaultParser();
         CommandLine cmd = null;
@@ -208,6 +214,12 @@ public final class App {
             imageFamily = cmd.getOptionValue("image_family");
         }
 
+        boolean withVpn = cmd.hasOption("with_vpn");
+        String vpnZone = Zone.RU_CENTRAL1_A.getId();
+        if (cmd.hasOption("vpn_zone")) {
+            vpnZone = cmd.getOptionValue("vpn_zone");
+        }
+
         // Configuration
         ServiceFactory factory = ServiceFactory.builder()
                 .credentialProvider(Auth.oauthTokenBuilder().fromEnv("YC_OAUTH"))
@@ -224,13 +236,25 @@ public final class App {
                 zoneToCidr.put(Zone.RU_CENTRAL1_B, cidrString[1]);
                 zoneToCidr.put(Zone.RU_CENTRAL1_C, cidrString[2]);
 
-                try {
-                    networkId = setupNet(factory, network, zoneToCidr);
-                } catch (Exception e) {
-                    // TODO Auto-generated catch block
-                    e.printStackTrace();
+                if (networkId == null) {
+                    try {
+                            networkId = setupNet(factory, network, zoneToCidr);
+                    } catch (Exception e) {
+                        // TODO Auto-generated catch block
+                        e.printStackTrace();
+                    }
                 }
-                inst.setupInstances(factory, Integer.parseInt(instancesNum), networkId, imageId, zonesStrings, Integer.parseInt(memoryString), Integer.parseInt(diskString));
+                inst.setupInstances(
+                    factory,
+                    Integer.parseInt(instancesNum),
+                    networkId,
+                    imageId,
+                    zonesStrings,
+                    Integer.parseInt(memoryString),
+                    Integer.parseInt(diskString),
+                    withVpn,
+                    vpnZone
+                );
                 break;
             case ("delete"):
                 if (networkId == null) {

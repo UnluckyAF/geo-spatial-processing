@@ -1,21 +1,29 @@
 package setup;
 
 import yandex.cloud.api.compute.v1.ImageOuterClass.Image;
+import yandex.cloud.api.compute.v1.DiskServiceGrpc;
 import yandex.cloud.api.compute.v1.ImageServiceGrpc;
 import yandex.cloud.api.compute.v1.ImageServiceGrpc.ImageServiceBlockingStub;
 import yandex.cloud.api.compute.v1.ImageServiceOuterClass.CreateImageMetadata;
 import yandex.cloud.api.compute.v1.ImageServiceOuterClass.CreateImageRequest;
 import yandex.cloud.api.compute.v1.ImageServiceOuterClass.GetImageLatestByFamilyRequest;
 import yandex.cloud.api.compute.v1.InstanceOuterClass.Instance;
+import yandex.cloud.api.compute.v1.InstanceOuterClass.IpVersion;
 import yandex.cloud.api.compute.v1.InstanceServiceGrpc;
+import yandex.cloud.api.compute.v1.DiskOuterClass.Disk;
+import yandex.cloud.api.compute.v1.DiskServiceGrpc.DiskServiceBlockingStub;
+import yandex.cloud.api.compute.v1.DiskServiceOuterClass.DeleteDiskRequest;
+import yandex.cloud.api.compute.v1.DiskServiceOuterClass.ListDisksRequest;
 import yandex.cloud.api.compute.v1.InstanceServiceGrpc.InstanceServiceBlockingStub;
 import yandex.cloud.api.compute.v1.InstanceServiceOuterClass.AttachedDiskSpec;
 import yandex.cloud.api.compute.v1.InstanceServiceOuterClass.AttachedDiskSpec.DiskSpec;
+import yandex.cloud.api.compute.v1.InstanceServiceOuterClass.NetworkInterfaceSpec.Builder;
 import yandex.cloud.api.compute.v1.InstanceServiceOuterClass.CreateInstanceMetadata;
 import yandex.cloud.api.compute.v1.InstanceServiceOuterClass.CreateInstanceRequest;
 import yandex.cloud.api.compute.v1.InstanceServiceOuterClass.DeleteInstanceRequest;
 import yandex.cloud.api.compute.v1.InstanceServiceOuterClass.ListInstancesRequest;
 import yandex.cloud.api.compute.v1.InstanceServiceOuterClass.NetworkInterfaceSpec;
+import yandex.cloud.api.compute.v1.InstanceServiceOuterClass.OneToOneNatSpec;
 import yandex.cloud.api.compute.v1.InstanceServiceOuterClass.PrimaryAddressSpec;
 import yandex.cloud.api.compute.v1.InstanceServiceOuterClass.ResourcesSpec;
 
@@ -40,6 +48,8 @@ import java.util.Map;
 import com.google.protobuf.InvalidProtocolBufferException;
 
 public class Instances {
+    private static final String VPN_FAMILY_ID = "openvpn";
+
     private static String myFolderId;
     private static String imageFolderId;
     private static String familyId;
@@ -79,28 +89,58 @@ public class Instances {
                 .build();
     }
 
-    public void setupInstances(ServiceFactory factory, int instancesNum, String networkId, String imageId, String[] zones, long memory, long disk) {
+    public void setupInstances(
+        ServiceFactory factory,
+        int instancesNum,
+        String networkId,
+        String imageId,
+        String[] zones,
+        long memory,
+        long disk,
+        boolean withVpn,
+        String vpnZone
+    ) {
         // Configuration
         InstanceServiceBlockingStub instanceService = factory.create(InstanceServiceBlockingStub.class, InstanceServiceGrpc::newBlockingStub);
         OperationServiceBlockingStub operationService = factory.create(OperationServiceBlockingStub.class, OperationServiceGrpc::newBlockingStub);
         ImageServiceBlockingStub imageService = factory.create(ImageServiceBlockingStub.class, ImageServiceGrpc::newBlockingStub);
 
         if (imageId == null) {
-            Image image = imageService.getLatestByFamily(buildGetLatestByFamilyRequest());
+            Image image = imageService.getLatestByFamily(buildGetLatestByFamilyRequest(familyId));
             imageId = image.getId();
         }
 
         NetworkServiceBlockingStub networkService = factory.create(NetworkServiceBlockingStub.class, NetworkServiceGrpc::newBlockingStub);
         ListNetworkSubnetsResponse subnets = networkService.listSubnets(buildListNetworkSubnetsRequest(networkId));
         Map<String, Subnet> zoneToSubnet = new HashMap<>();
+        String vpnSubnet = null;
+        if (withVpn) {
+            System.out.println("KEK");
+        }
         for (Subnet subnet : subnets.getSubnetsList()) {
             zoneToSubnet.put(subnet.getZoneId(), subnet);
+            System.out.println(String.format("DEBUG %s %s", subnet.getZoneId(), vpnZone));
+            System.out.println(vpnSubnet == null);
+            System.out.println(subnet.getZoneId().equals(vpnZone));
+            System.out.println(vpnSubnet == null && subnet.getZoneId().equals(vpnZone));
+            if (vpnSubnet == null && subnet.getZoneId().equals(vpnZone)) {
+                System.out.println("CHE");
+                vpnSubnet = subnet.getId();
+            }
         }
         int zone_ind = 0;
         for (int i = 0; i < instancesNum; i++, zone_ind = (zone_ind + 1) % zones.length) {
             // Create instance
             Subnet subnet = zoneToSubnet.get(zones[zone_ind]);
-            Operation createOperation = instanceService.create(buildCreateInstanceRequest(imageId, i, subnet.getZoneId(), subnet.getId(), memory, disk));
+            Operation createOperation = instanceService.create(buildCreateInstanceRequest(
+                imageId,
+                "myvm" + String.valueOf(i),
+                subnet.getZoneId(),
+                subnet.getId(),
+                memory,
+                disk,
+                false
+            ));
             System.out.println("Create instance request sent");
 
             // Wait for instance creation
@@ -121,11 +161,58 @@ public class Instances {
             }
             System.out.println(String.format("Created with id %s", instanceId));
         }
+
+        System.out.println(String.format("DEBUG2 %s %s", vpnSubnet, vpnZone));
+        if (withVpn && vpnSubnet != null) {
+            System.out.println("LOL");
+            createVPNInstance(instanceService, operationService, imageService, vpnZone, vpnSubnet);
+        }
+    }
+
+    private void createVPNInstance(
+        InstanceServiceBlockingStub instanceService,
+        OperationServiceBlockingStub operationService,
+        ImageServiceBlockingStub imageService,
+        String zoneId,
+        String subnetId
+    ) {
+        Image image = imageService.getLatestByFamily(buildGetLatestByFamilyRequest(VPN_FAMILY_ID));
+        String imageId = image.getId();
+
+        Operation createOperation = instanceService.create(buildCreateInstanceRequest(
+            imageId,
+            "vpn0",
+            zoneId,
+            subnetId,
+            2,
+            10,
+            true
+        ));
+        System.out.println("Create vpn instance request sent");
+
+        // Wait for instance creation
+        String instanceId = "";
+        try {
+            instanceId = createOperation.getMetadata().unpack(CreateInstanceMetadata.class).getInstanceId();
+        } catch (InvalidProtocolBufferException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+            System.exit(1);
+        }
+        try {
+            OperationUtils.wait(operationService, createOperation, Duration.ofMinutes(5));
+        } catch (OperationTimeoutException | InterruptedException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+            System.exit(1);
+        }
+        System.out.println(String.format("Created with id %s", instanceId));
     }
 
     public void deleteInstances(ServiceFactory factory) {
         InstanceServiceBlockingStub instanceService = factory.create(InstanceServiceBlockingStub.class, InstanceServiceGrpc::newBlockingStub);
         OperationServiceBlockingStub operationService = factory.create(OperationServiceBlockingStub.class, OperationServiceGrpc::newBlockingStub);
+        DiskServiceBlockingStub diskService = factory.create(DiskServiceBlockingStub.class, DiskServiceGrpc::newBlockingStub);
         // List instances in the folder
         List<Instance> instances = instanceService.list(buildListInstancesRequest()).getInstancesList();
         instances.forEach(System.out::println);
@@ -145,19 +232,58 @@ public class Instances {
             }
             System.out.println(String.format("Deleted instance %s", instance.getId()));
         }
+
+        List<Disk> disks = diskService.list(buildListDisksRequest()).getDisksList();
+        for (Disk disk : disks) {
+            Operation deleteOperation = diskService.delete(buildDeleteDiskRequest(disk.getId()));
+            System.out.println("Delete disk request sent");
+
+            // Wait for disk deletion
+            try {
+                OperationUtils.wait(operationService, deleteOperation, Duration.ofMinutes(1));
+            } catch (OperationTimeoutException | InterruptedException e) {
+                // TODO Auto-generated catch block
+                e.printStackTrace();
+            }
+            System.out.println(String.format("Deleted disk %s", disk.getId()));
+        }
     }
 
-    private static GetImageLatestByFamilyRequest buildGetLatestByFamilyRequest() {
-        return GetImageLatestByFamilyRequest.newBuilder()
-                .setFolderId(imageFolderId)
-                .setFamily(familyId)
+    private static ListDisksRequest buildListDisksRequest() {
+        return ListDisksRequest.newBuilder()
+                .setFolderId(myFolderId)
                 .build();
     }
 
-    private static CreateInstanceRequest buildCreateInstanceRequest(String imageId, int num, String zoneId, String subnetId, long memory, long disk) { // Gb
+    private static DeleteDiskRequest buildDeleteDiskRequest(String diskId) {
+        return DeleteDiskRequest.newBuilder()
+                .setDiskId(diskId)
+                .build();
+    }
+
+    private static GetImageLatestByFamilyRequest buildGetLatestByFamilyRequest(String familyName) {
+        return GetImageLatestByFamilyRequest.newBuilder()
+                .setFolderId(imageFolderId)
+                .setFamily(familyName)
+                .build();
+    }
+
+    private static CreateInstanceRequest buildCreateInstanceRequest(String imageId, String name, String zoneId, String subnetId, long memory, long disk, boolean is_public) { // Gb
+        Builder netSpec;
+        if (is_public) {
+            netSpec = NetworkInterfaceSpec.newBuilder()
+                        .setSubnetId(subnetId)
+                        .setPrimaryV4AddressSpec(PrimaryAddressSpec.newBuilder()
+                            .setOneToOneNatSpec(OneToOneNatSpec.newBuilder()
+                                .setIpVersion(IpVersion.IPV4)));
+        } else {
+            netSpec = NetworkInterfaceSpec.newBuilder()
+                        .setSubnetId(subnetId)
+                        .setPrimaryV4AddressSpec(PrimaryAddressSpec.getDefaultInstance());
+        }
         return CreateInstanceRequest.newBuilder()
                 .setFolderId(myFolderId)
-                .setName("ubuntu" + String.valueOf(num))
+                .setName(name)
                 .setZoneId(zoneId)
                 .setPlatformId(Platform.STANDARD_V2.getId())
                 .setResourcesSpec(ResourcesSpec.newBuilder().setCores(2).setCoreFraction(5).setMemory(memory * 1024 * 1024 * 1024))
@@ -165,10 +291,8 @@ public class Instances {
                         .setDiskSpec(DiskSpec.newBuilder()
                                 .setImageId(imageId)
                                 .setSize(disk * 1024 * 1024 * 1024)))
-                .addNetworkInterfaceSpecs(NetworkInterfaceSpec.newBuilder()
-                        .setSubnetId(subnetId)
-                        .setPrimaryV4AddressSpec(PrimaryAddressSpec.getDefaultInstance())
-                ).build();
+                .addNetworkInterfaceSpecs(netSpec)
+                .build();
     }
 
     private static ListInstancesRequest buildListInstancesRequest() {

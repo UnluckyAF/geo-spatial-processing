@@ -70,7 +70,7 @@ object  Main {
     val tilerOptions =
       Tiler.Options(
         resampleMethod = Average,
-        partitioner = new HashPartitioner(inputRdd.partitions.length)
+        partitioner = new HashPartitioner(inputRdd.partitions.length) // my partitioner - is it possible
       )
 
     val tiledRdd =
