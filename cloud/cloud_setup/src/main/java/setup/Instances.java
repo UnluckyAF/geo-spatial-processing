@@ -26,7 +26,8 @@ import yandex.cloud.api.compute.v1.InstanceServiceOuterClass.NetworkInterfaceSpe
 import yandex.cloud.api.compute.v1.InstanceServiceOuterClass.OneToOneNatSpec;
 import yandex.cloud.api.compute.v1.InstanceServiceOuterClass.PrimaryAddressSpec;
 import yandex.cloud.api.compute.v1.InstanceServiceOuterClass.ResourcesSpec;
-
+import yandex.cloud.api.compute.v1.InstanceServiceOuterClass.UpdateInstanceMetadataMetadata;
+import yandex.cloud.api.compute.v1.InstanceServiceOuterClass.UpdateInstanceMetadataRequest;
 import yandex.cloud.sdk.Platform;
 import yandex.cloud.sdk.ServiceFactory;
 import yandex.cloud.sdk.utils.OperationTimeoutException;
@@ -40,6 +41,11 @@ import yandex.cloud.api.vpc.v1.NetworkServiceOuterClass.ListNetworkSubnetsReques
 import yandex.cloud.api.vpc.v1.NetworkServiceOuterClass.ListNetworkSubnetsResponse;
 import yandex.cloud.api.vpc.v1.SubnetOuterClass.Subnet;
 
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
@@ -53,10 +59,20 @@ public class Instances {
     private static String myFolderId;
     private static String imageFolderId;
     private static String familyId;
-    public Instances(String myFolderId_, String imageFolderId_, String familyId_) {
+    private String cloudConfig;
+    private String sshKeys;
+    public Instances(String myFolderId_, String imageFolderId_, String familyId_, String cloudConfigPath_, String sshKeysPath_) {
         myFolderId = myFolderId_;
         imageFolderId = imageFolderId_;
         familyId = familyId_;
+        try {
+            cloudConfig = readFile(cloudConfigPath_, StandardCharsets.UTF_8);
+            sshKeys = readFile(sshKeysPath_, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+            System.exit(1);
+        }
     }
 
     public void createImage(ServiceFactory factory, String family, String diskId) {
@@ -114,17 +130,10 @@ public class Instances {
         ListNetworkSubnetsResponse subnets = networkService.listSubnets(buildListNetworkSubnetsRequest(networkId));
         Map<String, Subnet> zoneToSubnet = new HashMap<>();
         String vpnSubnet = null;
-        if (withVpn) {
-            System.out.println("KEK");
-        }
+
         for (Subnet subnet : subnets.getSubnetsList()) {
             zoneToSubnet.put(subnet.getZoneId(), subnet);
-            System.out.println(String.format("DEBUG %s %s", subnet.getZoneId(), vpnZone));
-            System.out.println(vpnSubnet == null);
-            System.out.println(subnet.getZoneId().equals(vpnZone));
-            System.out.println(vpnSubnet == null && subnet.getZoneId().equals(vpnZone));
             if (vpnSubnet == null && subnet.getZoneId().equals(vpnZone)) {
-                System.out.println("CHE");
                 vpnSubnet = subnet.getId();
             }
         }
@@ -162,9 +171,7 @@ public class Instances {
             System.out.println(String.format("Created with id %s", instanceId));
         }
 
-        System.out.println(String.format("DEBUG2 %s %s", vpnSubnet, vpnZone));
         if (withVpn && vpnSubnet != null) {
-            System.out.println("LOL");
             createVPNInstance(instanceService, operationService, imageService, vpnZone, vpnSubnet);
         }
     }
@@ -207,6 +214,29 @@ public class Instances {
             System.exit(1);
         }
         System.out.println(String.format("Created with id %s", instanceId));
+
+        updateMetadata(instanceService, operationService, instanceId);
+    }
+
+    private void updateMetadata(InstanceServiceBlockingStub instanceService, OperationServiceBlockingStub operationService, String instanceId) {
+        Operation updateMetaOperation = instanceService.updateMetadata(buildUpdateMetadateRequest(instanceId));
+
+        try {
+            OperationUtils.wait(operationService, updateMetaOperation, Duration.ofMinutes(5));
+        } catch (OperationTimeoutException | InterruptedException e) {
+            // TODO Auto-generated catch block
+            e.printStackTrace();
+            System.exit(1);
+        }
+        System.out.println(String.format("Added metadata with id %s", instanceId));
+    }
+
+    private UpdateInstanceMetadataRequest buildUpdateMetadateRequest(String instanceId) {
+        return UpdateInstanceMetadataRequest.newBuilder()
+                .setInstanceId(instanceId)
+                .putUpsert("user-data", cloudConfig)
+                .putUpsert("ssh-keys", "ubuntu:"+sshKeys)
+                .build();
     }
 
     public void deleteInstances(ServiceFactory factory) {
@@ -307,5 +337,12 @@ public class Instances {
         return ListNetworkSubnetsRequest.newBuilder()
                 .setNetworkId(networkId)
                 .build();
+    }
+
+    private static String readFile(String path, Charset encoding)
+        throws IOException
+    {
+        byte[] encoded = Files.readAllBytes(Paths.get(path));
+        return new String(encoded, encoding);
     }
 }

@@ -33,7 +33,7 @@ import java.util.Map;
  * Hello world!
  */
 public final class App {
-    private static final String MY_YC_FOLDER_ID = "b1ga6r1fob64eg80duhg";
+    private static final String MY_YC_FOLDER_ID = "b1g32dram6ql673m3pn7";
     private static final String YC_STANDARD_IMAGES = "standard-images";
     private static final String YC_UBUNTU_IMAGE_FAMILY = "ubuntu-1804";
 
@@ -227,7 +227,7 @@ public final class App {
                 .build();
         System.out.println("Hello World!");
 
-        Instances inst = new Instances(MY_YC_FOLDER_ID, YC_STANDARD_IMAGES, YC_UBUNTU_IMAGE_FAMILY);
+        Instances inst = new Instances(MY_YC_FOLDER_ID, YC_STANDARD_IMAGES, YC_UBUNTU_IMAGE_FAMILY, "cloud_config.yaml", "/Users/barukhov/.ssh/cloud.pub");
         switch (actionString) {
             case ("setup"):
                 // IPv4 CIDR for every availability zone
