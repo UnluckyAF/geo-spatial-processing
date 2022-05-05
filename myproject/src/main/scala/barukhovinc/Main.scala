@@ -70,7 +70,9 @@ object  Main {
     val tilerOptions =
       Tiler.Options(
         resampleMethod = Average,
-        partitioner = new HashPartitioner(inputRdd.partitions.length) // my partitioner - is it possible
+        partitioner = new HashPartitioner(inputRdd.partitions.length)
+        // partitioner = new SamePartitioner(inputRdd.partitions.length)
+        // https://stackoverflow.com/questions/23127329/how-to-define-custom-partitioner-for-spark-rdds-of-equally-sized-partition-where
       )
 
     val tiledRdd =
@@ -91,6 +93,7 @@ object  Main {
     val pathHadoop = new Path(output + "_spark")
     geotiff.write(pathHadoop, cropedRDD.sparkContext.hadoopConfiguration)
 
+    Console.println(inputRdd.partitions.length)
 
     // val geoTiff: SinglebandGeoTiff = GeoTiffReader.readSingleband(path)
     // val newGeoTiff: SinglebandGeoTiff = geoTiff.crop(4220, 4220, 4270, 4270)
