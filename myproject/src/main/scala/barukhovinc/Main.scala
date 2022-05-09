@@ -57,8 +57,14 @@ object  Main {
   }
 
   def run(inputs: List[String], output: String, numPartitions: Option[Int])(implicit sc: SparkContext): Unit = {
+    val myConf = sc.getConf.getAll
+    for (cnf <- myConf)
+      Console.println(cnf._1 +", "+ cnf._2)
+    Console.println(sc.defaultParallelism)
+
     val path: String = inputs.head
     val pth = new Path(path)
+    Console.println(pth)
     val inputRdd: RDD[(ProjectedExtent, Tile)] =
     sc.hadoopGeoTiffRDD(pth)
 

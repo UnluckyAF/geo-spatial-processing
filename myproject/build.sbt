@@ -9,9 +9,9 @@ libraryDependencies ++= Seq(
   "org.locationtech.geotrellis" %% "geotrellis-spark" % "3.6.0",
   "org.locationtech.geotrellis" %% "geotrellis-s3" % "3.6.0",
   "org.locationtech.geotrellis" %% "geotrellis-gdal" % "3.6.0",
-  "org.apache.spark" %% "spark-core" % "3.1.2" % Provided,
-  "org.apache.spark" %% "spark-sql" % "3.1.2" % Provided,
-  "org.apache.spark" %% "spark-hive" % "3.1.2" % Provided
+  "org.apache.spark" %% "spark-core" % "3.1.3" % Provided,
+  "org.apache.spark" %% "spark-sql" % "3.1.3" % Provided,
+  "org.apache.spark" %% "spark-hive" % "3.1.3" % Provided
 )
 
 console / initialCommands :=
@@ -72,7 +72,7 @@ sparkEmrBootstrap := List(
   BootstrapAction(
     "Install GDAL",
     "s3://geotrellis-demo/emr/bootstrap/conda-gdal.sh",
-    "3.1.2"
+    "3.1.3"
   )
 )
 sparkEmrConfigs := List(
