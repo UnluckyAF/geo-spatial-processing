@@ -51,3 +51,16 @@ class SamePartitioner(partitions: Int) extends Partitioner {
     return 0
   }
 }
+
+class RoundRobin(partitions: Int) extends Partitioner {
+  override def numPartitions: Int = partitions
+
+  var last_partition: Int = -1
+
+  override def getPartition(key: Any): Int = {
+    last_partition = (last_partition + 1) % numPartitions
+    Console.println("DEBUG", key, last_partition)
+    return last_partition
+  }
+}
+

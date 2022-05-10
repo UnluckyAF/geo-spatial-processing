@@ -83,7 +83,7 @@ object  Main {
     val tilerOptions =
       Tiler.Options(
         resampleMethod = Average,
-        partitioner = new HashPartitioner(inputRdd.partitions.length)
+        partitioner = new RoundRobin(inputRdd.partitions.length)
         // partitioner = new SamePartitioner(inputRdd.partitions.length)
         // https://stackoverflow.com/questions/23127329/how-to-define-custom-partitioner-for-spark-rdds-of-equally-sized-partition-where
       )
