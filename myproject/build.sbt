@@ -2,16 +2,17 @@ name := "MyProject"
 organization := "barukhovinc"
 version := "0.1.0"
 
-scalaVersion := "2.12.13"
+scalaVersion := "2.13.8"
 
 libraryDependencies ++= Seq(
   "com.monovore" %% "decline" % "1.2.0",
-  "org.locationtech.geotrellis" %% "geotrellis-spark" % "3.6.0",
-  "org.locationtech.geotrellis" %% "geotrellis-s3" % "3.6.0",
-  "org.locationtech.geotrellis" %% "geotrellis-gdal" % "3.6.0",
-  "org.apache.spark" %% "spark-core" % "3.1.3" % Provided,
-  "org.apache.spark" %% "spark-sql" % "3.1.3" % Provided,
-  "org.apache.spark" %% "spark-hive" % "3.1.3" % Provided
+  "org.locationtech.geotrellis" %% "geotrellis-spark" % "3.6.2",
+  // "org.locationtech.geotrellis" %% "geotrellis-s3" % "3.6.2",
+  "org.locationtech.geotrellis" %% "geotrellis-gdal" % "3.6.2",
+  "org.locationtech.geotrellis" %% "geotrellis-store" % "3.6.2",
+  "org.apache.spark" %% "spark-core" % "3.2.1" % Provided,
+  "org.apache.spark" %% "spark-sql" % "3.2.1" % Provided,
+  "org.apache.spark" %% "spark-hive" % "3.2.1" % Provided
 )
 
 console / initialCommands :=
@@ -72,7 +73,7 @@ sparkEmrBootstrap := List(
   BootstrapAction(
     "Install GDAL",
     "s3://geotrellis-demo/emr/bootstrap/conda-gdal.sh",
-    "3.1.3"
+    "3.1.2"
   )
 )
 sparkEmrConfigs := List(

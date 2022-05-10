@@ -10,8 +10,7 @@ import scala.util.Properties
 object Spark {
   def conf: SparkConf = new SparkConf()
     // .setIfMissing("spark.master", "local[*]")
-    // .setIfMissing("spark.master", "local-cluster[1,1,1024]")
-    .setIfMissing("spark.master", "spark://barukhov-x:7077")
+    // .setIfMissing("spark.master", "local-cluster[1,2,7168]")
     .setAppName("MyProject")
     .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
     .set("spark.kryo.registrator", "geotrellis.spark.store.kryo.KryoRegistrator")
@@ -34,7 +33,7 @@ object Spark {
     //   "/usr/local/spark/jars/htrace-core4-4.1.0-incubating.jar",
     // ))
 
-  implicit val session: SparkSession = SparkSession.builder.config(conf).enableHiveSupport.getOrCreate
+  implicit val session: SparkSession = SparkSession.builder().config(conf).enableHiveSupport().getOrCreate()
   implicit def context: SparkContext = session.sparkContext
 
   def currentActiveExecutors(sc: SparkContext): Seq[String] = {

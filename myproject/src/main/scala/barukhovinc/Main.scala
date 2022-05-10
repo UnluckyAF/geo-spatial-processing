@@ -27,33 +27,40 @@ import org.apache.spark.rdd._
 
 import org.log4s._
 
+import scala.collection.immutable.ArraySeq
+
 object  Main {
   @transient private[this] lazy val logger = getLogger
 
-  private val inputsOpt = Opts.options[String](
-    "inputs", help = "The path that points to data that will be read")
-  private val outputOpt = Opts.option[String](
-    "output", help = "The path of the output tiffs")
-  private val partitionsOpt =  Opts.option[Int](
-    "numPartitions", help = "The number of partitions to use").orNone
+  // private val inputsOpt = Opts.options[String](
+  //   "inputs", help = "The path that points to data that will be read")
+  // private val outputOpt = Opts.option[String](
+  //   "output", help = "The path of the output tiffs")
+  // private val partitionsOpt =  Opts.option[Int](
+  //   "numPartitions", help = "The number of partitions to use").orNone
 
-  private val command = Command(name = "MyProject", header = "GeoTrellis App: MyProject") {
-    (inputsOpt, outputOpt, partitionsOpt).tupled
-  }
+  // private val command = Command(name = "MyProject", header = "GeoTrellis App: MyProject") {
+  //   (inputsOpt, outputOpt, partitionsOpt).tupled
+  // }
 
   def main(args: Array[String]): Unit = {
-    command.parse(args, sys.env) match {
-      case Left(help) =>
-        System.err.println(help)
-        sys.exit(1)
+    // command.parse(ArraySeq.unsafeWrapArray(args), sys.env) match {
+    //   case Left(help) =>
+    //     System.err.println(help)
+    //     sys.exit(1)
 
-      case Right((i, o, p)) =>
-        try {
-          run(i.toList, o, p)(Spark.context)
-        } finally {
-          Spark.session.stop()
-        }
-    }
+    //   case Right((i, o, p)) =>
+    //     try {
+    //       run(i.toList, o, p)(Spark.context)
+    //     } finally {
+    //       Spark.session.stop()
+    //     }
+    // }
+    Console.println(scala.util.Properties.versionString)
+    val input: String = "file:/Users/barukhov/geo_spatial_data/LC09_L2SP_178022_20220412_20220414_02_T1/LC09_L2SP_178022_20220412_20220414_02_T1_SR_B1.TIF"
+    val output: String = "/Users/barukhov/geo_spatial_data/res"
+    run(List[String]{input}, output, Option[Int]{0})(Spark.context)
+    Spark.session.stop()
   }
 
   def run(inputs: List[String], output: String, numPartitions: Option[Int])(implicit sc: SparkContext): Unit = {
