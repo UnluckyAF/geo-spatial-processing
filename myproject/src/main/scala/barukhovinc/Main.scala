@@ -6,6 +6,7 @@ import geotrellis.proj4._
 import geotrellis.raster._
 import geotrellis.spark.store.hadoop._
 import org.apache.hadoop.fs.Path
+import geotrellis.raster.mapalgebra.focal.Square
 import geotrellis.raster.resample._
 import geotrellis.raster.io.geotiff.reader.GeoTiffReader
 import geotrellis.raster.io.geotiff.writer.GeoTiffWriter
@@ -32,106 +33,109 @@ import scala.collection.immutable.ArraySeq
 object  Main {
   @transient private[this] lazy val logger = getLogger
 
-  // private val inputsOpt = Opts.options[String](
-  //   "inputs", help = "The path that points to data that will be read")
-  // private val outputOpt = Opts.option[String](
-  //   "output", help = "The path of the output tiffs")
-  // private val partitionsOpt =  Opts.option[Int](
-  //   "numPartitions", help = "The number of partitions to use").orNone
-
-  // private val command = Command(name = "MyProject", header = "GeoTrellis App: MyProject") {
-  //   (inputsOpt, outputOpt, partitionsOpt).tupled
-  // }
-
   def main(args: Array[String]): Unit = {
-    // command.parse(ArraySeq.unsafeWrapArray(args), sys.env) match {
-    //   case Left(help) =>
-    //     System.err.println(help)
-    //     sys.exit(1)
-
-    //   case Right((i, o, p)) =>
-    //     try {
-    //       run(i.toList, o, p)(Spark.context)
-    //     } finally {
-    //       Spark.session.stop()
-    //     }
-    // }
     Console.println(scala.util.Properties.versionString)
-    val input: String = "file:/Users/barukhov/geo_spatial_data/LC09_L2SP_178022_20220412_20220414_02_T1/LC09_L2SP_178022_20220412_20220414_02_T1_SR_B1.TIF"
+    // val input: String = "file:/Users/barukhov/geo_spatial_data/LC09_L2SP_178022_20220412_20220414_02_T1/LC09_L2SP_178022_20220412_20220414_02_T1_SR_B1.TIF"
+    // val output: String = "/Users/barukhov/geo_spatial_data/res"
+    // val opName: String = "crop"
+    // val otherArgs: Array[String] = Array[String]("300000.000", "6000000.000", "500000.000", "6100000.000")
+    // val input1: String = "file:/Users/barukhov/geo_spatial_data/LC09_L2SP_178022_20220412_20220414_02_T1/LC09_L2SP_178022_20220412_20220414_02_T1_SR_B1.TIF"
+    // val input2: String = "file:/Users/barukhov/geo_spatial_data/LC09_L2SP_178022_20220412_20220414_02_T1/LC09_L2SP_178022_20220412_20220414_02_T1_QA_PIXEL.TIF"
+    // val output: String = "/Users/barukhov/geo_spatial_data/res"
+    // val opName: String = "add"
+    val otherArgs: Array[String] = Array[String]("1")
+    val input1: String = "file:/Users/barukhov/geo_spatial_data/LC09_L2SP_178022_20220412_20220414_02_T1/LC09_L2SP_178022_20220412_20220414_02_T1_SR_B1.TIF"
     val output: String = "/Users/barukhov/geo_spatial_data/res"
-    run(List[String]{input}, output, Option[Int]{0})(Spark.context)
+    val opName: String = "focalSum"
+    run(List[String](input1), output, opName, otherArgs)(Spark.context)
     Spark.session.stop()
   }
 
-  def run(inputs: List[String], output: String, numPartitions: Option[Int])(implicit sc: SparkContext): Unit = {
-    val myConf = sc.getConf.getAll
-    for (cnf <- myConf)
-      Console.println(cnf._1 +", "+ cnf._2)
-    Console.println(sc.defaultParallelism)
+  def read(inputs: List[String])(implicit sc: SparkContext): List[TileLayerRDD[SpatialKey]] = {
+    var tileInputs: List[TileLayerRDD[SpatialKey]] = List[TileLayerRDD[SpatialKey]]()
 
-    val path: String = inputs.head
-    val pth = new Path(path)
-    Console.println(pth)
-    val inputRdd: RDD[(ProjectedExtent, Tile)] =
-    sc.hadoopGeoTiffRDD(pth)
+    for (path <- inputs) {
+      val pth = new Path(path)
+      Console.println(pth)
+      val inputRdd: RDD[(ProjectedExtent, Tile)] =
+      sc.hadoopGeoTiffRDD(pth)
 
-    val layoutScheme = FloatingLayoutScheme(512)
+      val layoutScheme = FloatingLayoutScheme(1024)
 
-    val (_: Int, metadata: TileLayerMetadata[SpatialKey]) =
-      inputRdd.collectMetadata[SpatialKey](layoutScheme)
+      val (_: Int, metadata: TileLayerMetadata[SpatialKey]) =
+        inputRdd.collectMetadata[SpatialKey](layoutScheme)
 
-    val tilerOptions =
-      Tiler.Options(
-        resampleMethod = Average,
-        partitioner = new RoundRobin(inputRdd.partitions.length)
-        // partitioner = new SamePartitioner(inputRdd.partitions.length)
-        // https://stackoverflow.com/questions/23127329/how-to-define-custom-partitioner-for-spark-rdds-of-equally-sized-partition-where
-      )
+      val tilerOptions =
+        Tiler.Options(
+          resampleMethod = Average,
+          // partitioner = new RoundRobin(inputRdd.partitions.length)
+          partitioner = new HashPartitioner(inputRdd.partitions.length)
+          // partitioner = new RoundRobin(inputRdd.partitions.length)
+          // https://stackoverflow.com/questions/23127329/how-to-define-custom-partitioner-for-spark-rdds-of-equally-sized-partition-where
+        )
 
-    val tiledRdd =
-      inputRdd.tileToLayout[SpatialKey](metadata, tilerOptions)
+      val tiledRdd =
+        inputRdd.tileToLayout[SpatialKey](metadata, tilerOptions)
 
 
-    // At this point, we want to combine our RDD and our Metadata to get a TileLayerRDD[SpatialKey]
+      // At this point, we want to combine our RDD and our Metadata to get a TileLayerRDD[SpatialKey]
 
-    val layerRdd: TileLayerRDD[SpatialKey] =
-      ContextRDD(tiledRdd, metadata)
+      val layerRdd: TileLayerRDD[SpatialKey] =
+        ContextRDD(tiledRdd, metadata)
 
-    val areaOfInterest: Extent = Extent(300000.000, 6000000.000, 500000.000, 6100000.000)
+      tileInputs = layerRdd :: tileInputs
+      Console.println(inputRdd.partitions.length)
+    }
 
-    val cropedRDD = layerRdd.crop(areaOfInterest)
-    val stitched = cropedRDD.stitch()
+    return tileInputs
 
-    val geotiff = GeoTiff(stitched, cropedRDD.metadata.crs)
+  }
+
+  def write(res: TileLayerRDD[SpatialKey], output: String): Unit = {
+    val stitched = res.stitch()
+
+    val geotiff = GeoTiff(stitched, res.metadata.crs)
     val pathHadoop = new Path(output + "_spark")
-    geotiff.write(pathHadoop, cropedRDD.sparkContext.hadoopConfiguration)
+    geotiff.write(pathHadoop, res.sparkContext.hadoopConfiguration)
+  }
 
-    Console.println(inputRdd.partitions.length)
+  def crop(tileInputs: List[TileLayerRDD[SpatialKey]], boundingBox: ArraySeq[Double]): TileLayerRDD[SpatialKey] = {
+    val currentRDD: TileLayerRDD[SpatialKey] = tileInputs.head
+    val minX: Double = boundingBox(0)
+    val minY: Double = boundingBox(1)
+    val maxX: Double = boundingBox(2)
+    val maxY: Double = boundingBox(3)
+    val areaOfInterest: Extent = Extent(minX, minY, maxX, maxY)
 
-    // val geoTiff: SinglebandGeoTiff = GeoTiffReader.readSingleband(path)
-    // val newGeoTiff: SinglebandGeoTiff = geoTiff.crop(4220, 4220, 4270, 4270)
-    // GeoTiffWriter.write(newGeoTiff, output)
+    val cropedRDD = currentRDD.crop(areaOfInterest)
+    return cropedRDD
+  }
 
-    // val resampleRasterExtent: RasterExtent = RasterExtent(
-    //   geoTiff.extent,
-    //   1000,
-    //   1000
-    // )
-    // val resampled: SinglebandRaster = geoTiff.resample(resampleRasterExtent, Average, AutoHigherResolution)
-    // val anotherGeoTiff: SinglebandGeoTiff = SinglebandGeoTiff(resampled.tile, resampled.extent, geoTiff.crs, geoTiff.tags, geoTiff.options, geoTiff.overviews)
-    // GeoTiffWriter.write(anotherGeoTiff, output + "2")
+  def add(tileInputs: List[TileLayerRDD[SpatialKey]]): TileLayerRDD[SpatialKey] = {
+    return ContextRDD(tileInputs.head + tileInputs.last, tileInputs.head.metadata)
+  }
 
-    // val sumTiff: SinglebandGeoTiff = geoTiff + anotherGeoTiff
-    // GeoTiffWriter.write(sumTiff, output + "3")
-    // Console.println(geoTiff.extent)
-    // val resampleRasterExtent: RasterExtent = RasterExtent(
-    //   geoTiff.extent,
-    //   1000,
-    //   1000
-    // )
-    // val resampled: SinglebandRaster = geoTiff.resample(resampleRasterExtent, Average, AutoHigherResolution)
-    // val anotherGeoTiff: SinglebandGeoTiff = SinglebandGeoTiff(resampled.tile, resampled.extent, geoTiff.crs, geoTiff.tags, geoTiff.options, geoTiff.overviews)
-    // GeoTiffWriter.write(anotherGeoTiff, output + "2")
+  def focalSum(tileInputs: List[TileLayerRDD[SpatialKey]], padding: Int): TileLayerRDD[SpatialKey] = {
+    return ContextRDD(tileInputs.head.focalSum(Square(padding)), tileInputs.head.metadata)
+  }
+
+  def run(inputs: List[String], output: String, op: String, otherArgs: Array[String])(implicit sc: SparkContext): Unit = {
+    val tileInputs: List[TileLayerRDD[SpatialKey]] = read(inputs)(sc)
+
+    op match {
+      case "crop" =>
+        val res = crop(tileInputs, ArraySeq.unsafeWrapArray(otherArgs.map(_.toDouble)))
+        write(res, output)
+      case "add" =>
+        val res = add(tileInputs)
+        write(res, output)
+      case "focalSum" =>
+        val res = focalSum(tileInputs, otherArgs(0).toInt)
+        write(res, output)
+    }
+// 300000.000, 6000000.000, 500000.000, 6100000.000
+
+    // val addRes = layerRdd +
 
   }
 }

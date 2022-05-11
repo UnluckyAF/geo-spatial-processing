@@ -14,6 +14,7 @@ object Spark {
     .setAppName("MyProject")
     .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
     .set("spark.kryo.registrator", "geotrellis.spark.store.kryo.KryoRegistrator")
+    .set("spark.kryoserializer.buffer.max", "1g")
     // .setExecutorEnv("SPARK_HOME", Properties.envOrElse("SPARK_HOME", "/usr/local/spark-3.1.3"))
     // .setSparkHome(Properties.envOrElse("SPARK_HOME", "/usr/local/spark-3.1.3"))
     // .setExecutorEnv("SPARK_SCALA_VERSION", Properties.envOrElse("SPARK_SCALA_VERSION", "2.12"))
