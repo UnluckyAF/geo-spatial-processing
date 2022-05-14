@@ -155,20 +155,20 @@ object  Main {
     // var (qaResRDD: RDD[(SpatialKey,MultibandTile)], _: TileLayerMetadata[SpatialKey]) = oneRead(input4)(sc)
     // val qaLayerRdd: MultibandTileLayerRDD[SpatialKey] =
     //   ContextRDD(qaResRDD, qa_spec_metadata)
-    def maskClouds(rdd: MultibandTileLayerRDD[SpatialKey]): MultibandTileLayerRDD[SpatialKey] = {
-      val res = rdd.withContext{
-        rd => rd.mapValues{
-          x => x.mapBands{
-            (_, y) => y.combine(qaResRDD.first._2.tile) {(v: Int, qa: Int) =>
-              val isCloud = qa & 0x8000
-              val isCirrus = qa & 0x2000
-              if(isCloud > 0 || isCirrus > 0) { NODATA }
-              else { v }
-            }
-          }
-        }
+    def maskClouds(tile: Tile, qaTile: Tile): Tile =
+      tile.combine(qaTile) { (v: Int, qa: Int) =>
+        val isCloud = qa & 0x8000
+        val isCirrus = qa & 0x2000
+        if(isCloud > 0 || isCirrus > 0) { NODATA }
+        else { v }
       }
-      return res
+
+    val masked = layerRdd.withContext { rdd =>
+      // keys should match though
+      rdd.zip(qaResRDD).map {case ((_: SpatialKey, mbt: MultibandTile), (_: ProjectedExtent, qa: Tile)) =>
+      //   case ((_: SpatialKey, mbt: MultibandTile), (_: ProjectedExtent, qa: Tile)) =>
+        mbt.mapBands { case (_, b) => maskClouds(b, qa) }
+      }
     }
       // tile.combine(qaLayerRdd) { (v: Int, qa: Int) =>
       //   val isCloud = qa & 0x8000
@@ -177,7 +177,7 @@ object  Main {
       //   else { v }
       // }
 
-    val masked = maskClouds(layerRdd)
+    // val masked = maskClouds(layerRdd)
     val res = masked.convert(IntConstantNoDataCellType)
 
     return res
