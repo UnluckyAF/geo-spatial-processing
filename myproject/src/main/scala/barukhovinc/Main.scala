@@ -44,11 +44,14 @@ object  Main {
     // val output: String = "/Users/barukhov/geo_spatial_data/res"
     // val opName: String = "add"
     val otherArgs: Array[String] = Array[String]("1")
-    val input1: String = "file:/Users/barukhov/geo_spatial_data/LC09_L2SP_178022_20220412_20220414_02_T1/LC09_L2SP_178022_20220412_20220414_02_T1_SR_B4.TIF"
-    val input2: String = "file:/Users/barukhov/geo_spatial_data/LC09_L2SP_178022_20220412_20220414_02_T1/LC09_L2SP_178022_20220412_20220414_02_T1_SR_B3.TIF"
-    val input3: String = "file:/Users/barukhov/geo_spatial_data/LC09_L2SP_178022_20220412_20220414_02_T1/LC09_L2SP_178022_20220412_20220414_02_T1_SR_B5.TIF"
+    // val input1: String = "file:/Users/barukhov/geo_spatial_data/LC09_L2SP_178022_20220412_20220414_02_T1/LC09_L2SP_178022_20220412_20220414_02_T1_SR_B3.TIF"
+    // val input2: String = "file:/Users/barukhov/geo_spatial_data/LC09_L2SP_178022_20220412_20220414_02_T1/LC09_L2SP_178022_20220412_20220414_02_T1_SR_B2.TIF"
+    // val input3: String = "file:/Users/barukhov/geo_spatial_data/LC09_L2SP_178022_20220412_20220414_02_T1/LC09_L2SP_178022_20220412_20220414_02_T1_SR_B4.TIF"
+    val input1: String = "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_177022_20211120_20211130_01_T2/LC08_L1GT_177022_20211120_20211130_01_T2_B3.TIF"
+    val input2: String = "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_177022_20211120_20211130_01_T2/LC08_L1GT_177022_20211120_20211130_01_T2_B2.TIF"
+    val input3: String = "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_177022_20211120_20211130_01_T2/LC08_L1GT_177022_20211120_20211130_01_T2_B4.TIF"
     val output: String = "/Users/barukhov/geo_spatial_data/res"
-    val opName: String = "focalSum"
+    val opName: String = "test"
     run(List[String](input1, input2, input3), output, opName, otherArgs)(Spark.context)
     Spark.session.stop()
   }
@@ -148,7 +151,7 @@ object  Main {
   }
 
   def removeClouds(layerRdd: MultibandTileLayerRDD[SpatialKey])(implicit sc: SparkContext): MultibandTileLayerRDD[SpatialKey] = {
-    val input4: String = "file:/Users/barukhov/geo_spatial_data/LC09_L2SP_178022_20220412_20220414_02_T1/LC09_L2SP_178022_20220412_20220414_02_T1_SR_QA_AEROSOL.TIF"
+    val input4: String = "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_177022_20211120_20211130_01_T2/LC08_L1GT_177022_20211120_20211130_01_T2_BQA.TIF"
     val pth = new Path(input4)
     val qaResRDD: RDD[(ProjectedExtent, Tile)] =
       sc.hadoopGeoTiffRDD(pth)
@@ -157,17 +160,18 @@ object  Main {
     //   ContextRDD(qaResRDD, qa_spec_metadata)
     def maskClouds(tile: Tile, qaTile: Tile): Tile =
       tile.combine(qaTile) { (v: Int, qa: Int) =>
-        val isCloud = qa & 0x8000
-        val isCirrus = qa & 0x2000
+        val isCloud = qa & 0x0008
+        val isCirrus = qa & 0x1800
+        Console.println(isCloud, isCirrus)
         if(isCloud > 0 || isCirrus > 0) { NODATA }
         else { v }
       }
 
     val masked = layerRdd.withContext { rdd =>
       // keys should match though
-      rdd.zip(qaResRDD).map {case ((_: SpatialKey, mbt: MultibandTile), (_: ProjectedExtent, qa: Tile)) =>
+      rdd.mapValues {case mbt =>
       //   case ((_: SpatialKey, mbt: MultibandTile), (_: ProjectedExtent, qa: Tile)) =>
-        mbt.mapBands { case (_, b) => maskClouds(b, qa) }
+        mbt.mapBands { case (_, b) => maskClouds(b, qaResRDD.first._2) }
       }
     }
       // tile.combine(qaLayerRdd) { (v: Int, qa: Int) =>
@@ -237,7 +241,7 @@ object  Main {
       case "test" =>
         val tileInputs: MultibandTileLayerRDD[SpatialKey] = multiRead(inputs)(sc)
         val res = removeClouds(tileInputs)
-        multiWrite(res, output)
+        multiWrite(tileInputs, output)
     }
 // 300000.000, 6000000.000, 500000.000, 6100000.000
 
