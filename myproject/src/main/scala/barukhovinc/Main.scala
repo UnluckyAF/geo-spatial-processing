@@ -368,13 +368,42 @@ object  Main {
           "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_176022_20211231_20220107_01_T2/LC08_L1GT_176022_20211231_20220107_01_T2_B3.TIF",
           "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_176022_20211231_20220107_01_T2/LC08_L1GT_176022_20211231_20220107_01_T2_B4.TIF"
         )
-        val (rdd2, meta2) = simpleMultiRead(inputs ::: inputs2)(sc)
+        val inputs3 = List[String]("file:/Users/barukhov/geo_spatial_data/LC08_L1TP_178021_20211229_20220106_01_T2/LC08_L1TP_178021_20211229_20220106_01_T2_B2.TIF",
+          "file:/Users/barukhov/geo_spatial_data/LC08_L1TP_178021_20211229_20220106_01_T2/LC08_L1TP_178021_20211229_20220106_01_T2_B3.TIF",
+          "file:/Users/barukhov/geo_spatial_data/LC08_L1TP_178021_20211229_20220106_01_T2/LC08_L1TP_178021_20211229_20220106_01_T2_B4.TIF"
+        )
+
+
+        // Constructs a ColorMap with default options,
+        // and a set of mapped values to color stops.
+        // val colorMap1 =
+        //   ColorMap(
+        //     Map(
+        //       3.5 -> RGB(0,255,0),
+        //       7.5 -> RGB(63,255,51),
+        //       11.5 -> RGB(102,255,102),
+        //       15.5 -> RGB(178,255,102),
+        //       19.5 -> RGB(255,255,0),
+        //       23.5 -> RGB(255,255,51),
+        //       26.5 -> RGB(255,153,51),
+        //       31.5 -> RGB(255,128,0),
+        //       35.0 -> RGB(255,51,51),
+        //       40.0 -> RGB(255,0,0)
+        //     )
+        //   )
+
+        val (rdd2, meta2) = simpleMultiRead(inputs ::: inputs2 ::: inputs3)(sc)
         // val res = rdd.union(rdd2)
 
         val layerRdd: MultibandTileLayerRDD[SpatialKey] =
           ContextRDD(rdd2, meta2)
 
-        val res = multiCrop(layerRdd, ArraySeq[Double](500000.000, 5920000.000, 700000.000, 6300000.000))
+        // val res = layerRdd.map {
+        //   case (key, tile) => {
+        //     (key, tile.renderPng().write("/Users/barukhov/geo_spatial_data/check_rgb"))
+        //   }
+        // }
+        val res = multiCrop(layerRdd, ArraySeq[Double](450000.000, 6000000.000, 750000.000, 6200000.000))
         multiWrite(res, output)
     }
 // 300000.000, 6000000.000, 500000.000, 6100000.000
