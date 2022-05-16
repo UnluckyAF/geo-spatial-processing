@@ -30,6 +30,7 @@ import org.log4s._
 
 import scala.collection.immutable.ArraySeq
 
+
 object  Main {
   @transient private[this] lazy val logger = getLogger
 
@@ -44,14 +45,15 @@ object  Main {
     // val output: String = "/Users/barukhov/geo_spatial_data/res"
     // val opName: String = "add"
     val otherArgs: Array[String] = Array[String]("1")
-    // val input1: String = "file:/Users/barukhov/geo_spatial_data/LC09_L2SP_178022_20220412_20220414_02_T1/LC09_L2SP_178022_20220412_20220414_02_T1_SR_B3.TIF"
-    // val input2: String = "file:/Users/barukhov/geo_spatial_data/LC09_L2SP_178022_20220412_20220414_02_T1/LC09_L2SP_178022_20220412_20220414_02_T1_SR_B2.TIF"
-    // val input3: String = "file:/Users/barukhov/geo_spatial_data/LC09_L2SP_178022_20220412_20220414_02_T1/LC09_L2SP_178022_20220412_20220414_02_T1_SR_B4.TIF"
-    val input1: String = "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_177022_20211120_20211130_01_T2/LC08_L1GT_177022_20211120_20211130_01_T2_B3.TIF"
-    val input2: String = "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_177022_20211120_20211130_01_T2/LC08_L1GT_177022_20211120_20211130_01_T2_B2.TIF"
-    val input3: String = "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_177022_20211120_20211130_01_T2/LC08_L1GT_177022_20211120_20211130_01_T2_B4.TIF"
+    val input1: String = "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_176021_20211231_20220107_01_T2/LC08_L1GT_176021_20211231_20220107_01_T2_B3.TIF"
+    val input2: String = "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_176021_20211231_20220107_01_T2/LC08_L1GT_176021_20211231_20220107_01_T2_B2.TIF"
+    val input3: String = "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_176021_20211231_20220107_01_T2/LC08_L1GT_176021_20211231_20220107_01_T2_B4.TIF"
+    // val input1: String = "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_177022_20211120_20211130_01_T2/"
+    // val prefix: String = "LC08_L1GT_177022_20211120_20211130_01_T2"
+    // val input2: String = "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_177022_20211120_20211130_01_T2/LC08_L1GT_177022_20211120_20211130_01_T2_B2.TIF"
+    // val input3: String = "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_177022_20211120_20211130_01_T2/LC08_L1GT_177022_20211120_20211130_01_T2_B4.TIF"
     val output: String = "/Users/barukhov/geo_spatial_data/res"
-    val opName: String = "test"
+    val opName: String = "spectest2"
     run(List[String](input1, input2, input3), output, opName, otherArgs)(Spark.context)
     Spark.session.stop()
   }
@@ -123,8 +125,69 @@ object  Main {
     // val layerRdd: MultibandTileLayerRDD[SpatialKey] =
     //   ContextRDD(tiledRdd, metadata)
 
-    Console.println(inputRdd.partitions.length)
+    Console.println(tiledRdd.partitions.length)
     return (tiledRdd, metadata)
+  }
+
+  def simpleMultiRead(inputs: List[String])(implicit sc: SparkContext): (RDD[(SpatialKey,MultibandTile)], TileLayerMetadata[SpatialKey]) = {
+    // var tileInputs: List[MultibandTileLayerRDD[SpatialKey]] = List[MultibandTileLayerRDD[SpatialKey]]()
+    // var (resRDD: RDD[(SpatialKey,MultibandTile)], spec_metadata: TileLayerMetadata[SpatialKey]) = oneRead(inputs.head)(sc)
+
+    // val layoutScheme = FloatingLayoutScheme(512)
+
+    // for (path <- inputs.tail) {
+    //   val (rdd: RDD[(SpatialKey,MultibandTile)], _: TileLayerMetadata[SpatialKey]) = oneRead(path)(sc)
+    //   resRDD = resRDD.union(rdd)
+    // }
+
+    // val (_: Int, metadata: TileLayerMetadata[SpatialKey]) =
+    //   resRDD.collectMetadata[SpatialKey](layoutScheme)
+
+    // val layerRdd: MultibandTileLayerRDD[SpatialKey] =
+    //   ContextRDD(resRDD, spec_metadata)
+    // var res: MultibandTileLayerRDD[SpatialKey] = tileInputs.head
+    // for (rdd <- tileInputs.tail) {
+    //   res = res.union(rdd)
+    // }
+    val pth_start = new Path(inputs.head)
+    Console.println(pth_start)
+    var inputRdd: RDD[(ProjectedExtent, MultibandTile)] =
+    sc.hadoopMultibandGeoTiffRDD(pth_start)
+    for (path <- inputs.tail) {
+      val pth = new Path(path)
+      Console.println(pth)
+      val newInputRdd: RDD[(ProjectedExtent, MultibandTile)] =
+      sc.hadoopMultibandGeoTiffRDD(pth)
+      inputRdd = inputRdd.union(newInputRdd)
+    }
+
+    val layoutScheme = FloatingLayoutScheme(1024)
+
+    val (_: Int, metadata: TileLayerMetadata[SpatialKey]) =
+      inputRdd.collectMetadata[SpatialKey](layoutScheme)
+
+    val tilerOptions =
+      Tiler.Options(
+        resampleMethod = Average,
+        // partitioner = new RoundRobin(inputRdd.partitions.length)
+        partitioner = new HashPartitioner(inputRdd.partitions.length)
+        // partitioner = new RoundRobin(inputRdd.partitions.length)
+        // https://stackoverflow.com/questions/23127329/how-to-define-custom-partitioner-for-spark-rdds-of-equally-sized-partition-where
+      )
+
+    val tiledRdd =
+      inputRdd.tileToLayout[SpatialKey](metadata, tilerOptions)
+
+    // At this point, we want to combine our RDD and our Metadata to get a TileLayerRDD[SpatialKey]
+
+    // val layerRdd: TileLayerRDD[SpatialKey] =
+    //   ContextRDD(tiledRdd, metadata)
+
+    // tileInputs = layerRdd :: tileInputs
+    Console.println(inputRdd.partitions.length)
+    // return layerRdd
+    return (tiledRdd, metadata)
+
   }
 
   def multiRead(inputs: List[String])(implicit sc: SparkContext): MultibandTileLayerRDD[SpatialKey] = {
@@ -148,6 +211,38 @@ object  Main {
     //   res = res.union(rdd)
     // }
     return layerRdd
+  }
+
+  class Scene_L8C1L1(input: String, prefix: String) {
+    val b: String = "B2.TIF"
+    val g: String = "B3.TIF"
+    val r: String = "B4.TIF"
+    val nir: String = "B5.TIF"
+    val qa: String = "BQA.TIF"
+    val dir: String = input
+
+    var rgb: MultibandTileLayerRDD[SpatialKey] = _
+    var is_rgb: Boolean = false
+
+    def getRGB()(implicit sc: SparkContext): MultibandTileLayerRDD[SpatialKey] = {
+      if (is_rgb) {
+        return rgb
+      }
+      val res = multiRead(List[String](dir+prefix+"_"+r, dir+prefix+"_"+g,dir+prefix+"_"+b))(sc)
+      is_rgb = true
+      rgb = res
+      return res
+    }
+
+    def getRGNIR()(implicit sc: SparkContext): MultibandTileLayerRDD[SpatialKey] = {
+      val res = multiRead(List[String](dir+prefix+"_"+r, dir+prefix+"_"+g,dir+prefix+"_"+nir))(sc)
+      return res
+    }
+
+    def getQA()(implicit sc: SparkContext): TileLayerRDD[SpatialKey] = {
+      val res = read(List[String](dir+prefix+"_"+qa))(sc)
+      return res.head
+    }
   }
 
   def removeClouds(layerRdd: MultibandTileLayerRDD[SpatialKey])(implicit sc: SparkContext): MultibandTileLayerRDD[SpatialKey] = {
@@ -224,6 +319,17 @@ object  Main {
     return ContextRDD(tileInputs.head.focalSum(Square(padding)), tileInputs.head.metadata)
   }
 
+  def multiCrop(tile: MultibandTileLayerRDD[SpatialKey], boundingBox: ArraySeq[Double]): MultibandTileLayerRDD[SpatialKey] = {
+    val minX: Double = boundingBox(0)
+    val minY: Double = boundingBox(1)
+    val maxX: Double = boundingBox(2)
+    val maxY: Double = boundingBox(3)
+    val areaOfInterest: Extent = Extent(minX, minY, maxX, maxY)
+
+    val cropedRDD = tile.crop(areaOfInterest)
+    return cropedRDD
+  }
+
   def run(inputs: List[String], output: String, op: String, otherArgs: Array[String])(implicit sc: SparkContext): Unit = {
     op match {
       case "crop" =>
@@ -242,6 +348,34 @@ object  Main {
         val tileInputs: MultibandTileLayerRDD[SpatialKey] = multiRead(inputs)(sc)
         val res = removeClouds(tileInputs)
         multiWrite(tileInputs, output)
+      case "spectest" =>
+        val scene = new Scene_L8C1L1(inputs.head, inputs.tail.head)
+        // val (rdd: RDD[(SpatialKey,MultibandTile)], meta: TileLayerMetadata[SpatialKey]) = oneRead(inputs.head)(sc)
+        // val layerRdd: MultibandTileLayerRDD[SpatialKey] =
+        //   ContextRDD(rdd, meta)
+        // // val tileInputs: MultibandTileLayerRDD[SpatialKey] = multiRead(inputs)(sc)
+        // // val res = removeClouds(tileInputs)
+        // val res = layerRdd.withContext{
+        //   rdd => rdd.mapValues{
+        //     tile => tile.subsetBands(3, 4, 5)
+        //   }
+        // }
+        val res = scene.getRGB()(sc)
+        multiWrite(res, output)
+      case "spectest2" =>
+        // val (rdd, meta) = simpleMultiRead(inputs)(sc)
+        val inputs2 = List[String]("file:/Users/barukhov/geo_spatial_data/LC08_L1GT_176022_20211231_20220107_01_T2/LC08_L1GT_176022_20211231_20220107_01_T2_B2.TIF",
+          "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_176022_20211231_20220107_01_T2/LC08_L1GT_176022_20211231_20220107_01_T2_B3.TIF",
+          "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_176022_20211231_20220107_01_T2/LC08_L1GT_176022_20211231_20220107_01_T2_B4.TIF"
+        )
+        val (rdd2, meta2) = simpleMultiRead(inputs ::: inputs2)(sc)
+        // val res = rdd.union(rdd2)
+
+        val layerRdd: MultibandTileLayerRDD[SpatialKey] =
+          ContextRDD(rdd2, meta2)
+
+        val res = multiCrop(layerRdd, ArraySeq[Double](500000.000, 5920000.000, 700000.000, 6300000.000))
+        multiWrite(res, output)
     }
 // 300000.000, 6000000.000, 500000.000, 6100000.000
 
