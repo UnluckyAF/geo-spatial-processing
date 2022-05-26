@@ -40,22 +40,22 @@ object  Main {
     // val output: String = "/Users/barukhov/geo_spatial_data/res"
     // val opName: String = "crop"
     // val otherArgs: Array[String] = Array[String]("300000.000", "6000000.000", "500000.000", "6100000.000")
-    // val input1: String = "file:/Users/barukhov/geo_spatial_data/LC09_L2SP_178022_20220412_20220414_02_T1/LC09_L2SP_178022_20220412_20220414_02_T1_SR_B1.TIF"
+    // val input1: String = "file:/Users/barukhov/geo_spatial_data/LC09_L2SP_178022_20220412_20220414_02_T1/LC09_L2SP_178022_20220412_20220414_02_T1_SR_B5.TIF"
     // val input2: String = "file:/Users/barukhov/geo_spatial_data/LC09_L2SP_178022_20220412_20220414_02_T1/LC09_L2SP_178022_20220412_20220414_02_T1_QA_PIXEL.TIF"
     // val output: String = "/Users/barukhov/geo_spatial_data/res"
     // val opName: String = "add"
-    val otherArgs: Array[String] = Array[String]("1")
-    val input1: String = "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_176021_20211231_20220107_01_T2/LC08_L1GT_176021_20211231_20220107_01_T2_B3.TIF"
-    val input2: String = "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_176021_20211231_20220107_01_T2/LC08_L1GT_176021_20211231_20220107_01_T2_B2.TIF"
+    val otherArgs: Array[String] = Array[String]("2")
+    val input1: String = "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_176021_20211231_20220107_01_T2/LC08_L1GT_176021_20211231_20220107_01_T2_B2.TIF"
+    val input2: String = "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_176021_20211231_20220107_01_T2/LC08_L1GT_176021_20211231_20220107_01_T2_B3.TIF"
     val input3: String = "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_176021_20211231_20220107_01_T2/LC08_L1GT_176021_20211231_20220107_01_T2_B4.TIF"
     // val input1: String = "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_177022_20211120_20211130_01_T2/"
     // val prefix: String = "LC08_L1GT_177022_20211120_20211130_01_T2"
     // val input2: String = "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_177022_20211120_20211130_01_T2/LC08_L1GT_177022_20211120_20211130_01_T2_B2.TIF"
     // val input3: String = "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_177022_20211120_20211130_01_T2/LC08_L1GT_177022_20211120_20211130_01_T2_B4.TIF"
     val output: String = "/Users/barukhov/geo_spatial_data/res"
-    val opName: String = "spectest2"
+    val opName: String = "spectest4"
     run(List[String](input1, input2, input3), output, opName, otherArgs)(Spark.context)
-    Spark.session.stop()
+    // Spark.session.stop()
   }
 
   def read(inputs: List[String])(implicit sc: SparkContext): List[TileLayerRDD[SpatialKey]] = {
@@ -103,7 +103,7 @@ object  Main {
     val inputRdd: RDD[(ProjectedExtent, MultibandTile)] =
     sc.hadoopMultibandGeoTiffRDD(pth)
 
-    val layoutScheme = FloatingLayoutScheme(512)
+    val layoutScheme = FloatingLayoutScheme(256)
 
     val (_: Int, metadata: TileLayerMetadata[SpatialKey]) =
       inputRdd.collectMetadata[SpatialKey](layoutScheme)
@@ -161,7 +161,7 @@ object  Main {
       inputRdd = inputRdd.union(newInputRdd)
     }
 
-    val layoutScheme = FloatingLayoutScheme(1024)
+    val layoutScheme = FloatingLayoutScheme(512)
 
     val (_: Int, metadata: TileLayerMetadata[SpatialKey]) =
       inputRdd.collectMetadata[SpatialKey](layoutScheme)
@@ -194,7 +194,7 @@ object  Main {
     // var tileInputs: List[MultibandTileLayerRDD[SpatialKey]] = List[MultibandTileLayerRDD[SpatialKey]]()
     var (resRDD: RDD[(SpatialKey,MultibandTile)], spec_metadata: TileLayerMetadata[SpatialKey]) = oneRead(inputs.head)(sc)
 
-    val layoutScheme = FloatingLayoutScheme(512)
+    val layoutScheme = FloatingLayoutScheme(256)
 
     for (path <- inputs.tail) {
       val (rdd: RDD[(SpatialKey,MultibandTile)], _: TileLayerMetadata[SpatialKey]) = oneRead(path)(sc)
@@ -244,6 +244,38 @@ object  Main {
       return res.head
     }
   }
+
+  // class Scenes_L8C1L1(input: String, prefix: String) {
+  //   val b: String = "B2.TIF"
+  //   val g: String = "B3.TIF"
+  //   val r: String = "B4.TIF"
+  //   val nir: String = "B5.TIF"
+  //   val qa: String = "BQA.TIF"
+  //   val dir: String = input
+
+  //   var rgb: MultibandTileLayerRDD[SpatialKey] = _
+  //   var is_rgb: Boolean = false
+
+  //   def getRGB()(implicit sc: SparkContext): MultibandTileLayerRDD[SpatialKey] = {
+  //     if (is_rgb) {
+  //       return rgb
+  //     }
+  //     val res = multiRead(List[String](dir+prefix+"_"+r, dir+prefix+"_"+g,dir+prefix+"_"+b))(sc)
+  //     is_rgb = true
+  //     rgb = res
+  //     return res
+  //   }
+
+  //   def getRGNIR()(implicit sc: SparkContext): MultibandTileLayerRDD[SpatialKey] = {
+  //     val res = multiRead(List[String](dir+prefix+"_"+r, dir+prefix+"_"+g,dir+prefix+"_"+nir))(sc)
+  //     return res
+  //   }
+
+  //   def getQA()(implicit sc: SparkContext): TileLayerRDD[SpatialKey] = {
+  //     val res = read(List[String](dir+prefix+"_"+qa))(sc)
+  //     return res.head
+  //   }
+  // }
 
   def removeClouds(layerRdd: MultibandTileLayerRDD[SpatialKey])(implicit sc: SparkContext): MultibandTileLayerRDD[SpatialKey] = {
     val input4: String = "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_177022_20211120_20211130_01_T2/LC08_L1GT_177022_20211120_20211130_01_T2_BQA.TIF"
@@ -330,6 +362,34 @@ object  Main {
     return cropedRDD
   }
 
+  def multiAdd(tileInputs: List[MultibandTileLayerRDD[SpatialKey]]): MultibandTileLayerRDD[SpatialKey] = {
+    val first = tileInputs.head
+    val second = tileInputs.last
+    val res = first.withContext {
+      rdd => rdd.zip(second).map {
+        case ((key, fst_mbnd), (_, scnd_mbnd)) => (key, fst_mbnd.mapBands {
+          (ind, tile) => tile + scnd_mbnd.band(ind)
+        })
+      }
+    }
+
+    return res
+  }
+
+  def multiFocalSum(tileInputs: List[MultibandTileLayerRDD[SpatialKey]], padding: Int): MultibandTileLayerRDD[SpatialKey] = {
+    val first = tileInputs.head
+    val res = first.withContext {
+      rdd => rdd.mapValues {
+        // fst_mbnd => fst_mbnd.focalSum(Square(padding))
+        fst_mbnd => fst_mbnd.mapBands {
+          (_, tile) => tile.focalSum(Square(padding), TargetCell.All, new HashPartitioner(rdd.partitions.length))
+        }
+      }
+    }
+
+    return res
+  }
+
   def run(inputs: List[String], output: String, op: String, otherArgs: Array[String])(implicit sc: SparkContext): Unit = {
     op match {
       case "crop" =>
@@ -404,6 +464,34 @@ object  Main {
         //   }
         // }
         val res = multiCrop(layerRdd, ArraySeq[Double](450000.000, 6000000.000, 750000.000, 6200000.000))
+        multiWrite(res, output)
+      case "spectest3" =>
+        // val (rdd, meta) = simpleMultiRead(inputs)(sc)
+        val inputs2 = List[String]("file:/Users/barukhov/geo_spatial_data/LC08_L1GT_176022_20211231_20220107_01_T2/LC08_L1GT_176022_20211231_20220107_01_T2_B2.TIF",
+          "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_176022_20211231_20220107_01_T2/LC08_L1GT_176022_20211231_20220107_01_T2_B3.TIF",
+          "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_176022_20211231_20220107_01_T2/LC08_L1GT_176022_20211231_20220107_01_T2_B4.TIF"
+        )
+        // val inputs3 = List[String]("file:/Users/barukhov/geo_spatial_data/LC08_L1TP_178021_20211229_20220106_01_T2/LC08_L1TP_178021_20211229_20220106_01_T2_B2.TIF",
+        //   "file:/Users/barukhov/geo_spatial_data/LC08_L1TP_178021_20211229_20220106_01_T2/LC08_L1TP_178021_20211229_20220106_01_T2_B3.TIF",
+        //   "file:/Users/barukhov/geo_spatial_data/LC08_L1TP_178021_20211229_20220106_01_T2/LC08_L1TP_178021_20211229_20220106_01_T2_B4.TIF"
+        // )
+        val f = multiRead(inputs)(sc)
+        val s = multiRead(inputs2)(sc)
+        val res = multiAdd(List[MultibandTileLayerRDD[SpatialKey]](f, s))
+        multiWrite(res, output)
+      case "spectest4" =>
+        // val (rdd, meta) = simpleMultiRead(inputs)(sc)
+        // val inputs2 = List[String]("file:/Users/barukhov/geo_spatial_data/LC08_L1GT_176022_20211231_20220107_01_T2/LC08_L1GT_176022_20211231_20220107_01_T2_B2.TIF",
+        //   "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_176022_20211231_20220107_01_T2/LC08_L1GT_176022_20211231_20220107_01_T2_B3.TIF",
+        //   "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_176022_20211231_20220107_01_T2/LC08_L1GT_176022_20211231_20220107_01_T2_B4.TIF"
+        // )
+        // val inputs3 = List[String]("file:/Users/barukhov/geo_spatial_data/LC08_L1TP_178021_20211229_20220106_01_T2/LC08_L1TP_178021_20211229_20220106_01_T2_B2.TIF",
+        //   "file:/Users/barukhov/geo_spatial_data/LC08_L1TP_178021_20211229_20220106_01_T2/LC08_L1TP_178021_20211229_20220106_01_T2_B3.TIF",
+        //   "file:/Users/barukhov/geo_spatial_data/LC08_L1TP_178021_20211229_20220106_01_T2/LC08_L1TP_178021_20211229_20220106_01_T2_B4.TIF"
+        // )
+        val f = multiRead(inputs)(sc)
+        // val s = multiRead(inputs2)(sc)
+        val res = multiFocalSum(List[MultibandTileLayerRDD[SpatialKey]](f), otherArgs(0).toInt)
         multiWrite(res, output)
     }
 // 300000.000, 6000000.000, 500000.000, 6100000.000

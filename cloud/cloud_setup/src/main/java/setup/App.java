@@ -22,7 +22,12 @@ import yandex.cloud.api.vpc.v1.SubnetServiceOuterClass.DeleteSubnetMetadata;
 import yandex.cloud.api.vpc.v1.SubnetServiceOuterClass.DeleteSubnetRequest;
 
 import org.apache.commons.cli.*;
+import org.yaml.snakeyaml.Yaml;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.InputStream;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -138,6 +143,17 @@ public final class App {
      * @param args The arguments of the program.
      */
     public static void main(String[] args) {
+        Yaml yaml = new Yaml();
+        File initialFile = new File("~/geo_spatial_data/hehe/cloud/cloud_setup/test.yaml");
+        InputStream targetStream = null;
+        try {
+            targetStream = new FileInputStream(initialFile);
+        } catch (FileNotFoundException e1) {
+            // TODO Auto-generated catch block
+            e1.printStackTrace();
+        }
+        Map<String, Object> obj = yaml.load(targetStream);
+        System.out.println(obj);
         Options options = new Options();
 
         Option action = new Option("a", "action", true, "action to do");

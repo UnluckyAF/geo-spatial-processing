@@ -1,0 +1,9 @@
+network: "network1"
+cidr:
+  - "192.168.0.0/24"
+  - "192.168.1.0/24"
+  - "192.168.2.0/24"
+instances: 3
+zones: "ru-central1-a"
+memory: 1
+disk: 10
