@@ -378,11 +378,11 @@ object  Main {
 
   def multiFocalSum(tileInputs: List[MultibandTileLayerRDD[SpatialKey]], padding: Int): MultibandTileLayerRDD[SpatialKey] = {
     val first = tileInputs.head
+    val neighborhood = Square(padding)
     val res = first.withContext {
-      rdd => rdd.mapValues {
-        // fst_mbnd => fst_mbnd.focalSum(Square(padding))
-        fst_mbnd => fst_mbnd.mapBands {
-          (_, tile) => tile.focalSum(Square(padding), TargetCell.All, new HashPartitioner(rdd.partitions.length))
+      rdd => rdd.bufferTiles(neighborhood.extent).mapValues {
+        bufferedTile => bufferedTile.tile.mapBands {
+          (_, band) => band.focalSum(neighborhood, Some(bufferedTile.targetArea))
         }
       }
     }
