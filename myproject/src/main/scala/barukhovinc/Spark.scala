@@ -9,8 +9,7 @@ import scala.util.Properties
 
 object Spark {
   def conf: SparkConf = new SparkConf()
-    .setIfMissing("spark.master", "local[*]")
-    // .setIfMissing("spark.master", "local-cluster[1,2,7168]")
+    // .setIfMissing("spark.master", "local[*]")
     .setAppName("MyProject")
     .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
     .set("spark.kryo.registrator", "geotrellis.spark.store.kryo.KryoRegistrator")

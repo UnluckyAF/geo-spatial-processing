@@ -144,7 +144,7 @@ public final class App {
      */
     public static void main(String[] args) {
         Yaml yaml = new Yaml();
-        File initialFile = new File("~/geo_spatial_data/hehe/cloud/cloud_setup/test.yaml");
+        File initialFile = new File("/Users/barukhov/geo_spatial_data/hehe/cloud/cloud_setup/test.yaml");
         InputStream targetStream = null;
         try {
             targetStream = new FileInputStream(initialFile);
@@ -160,23 +160,9 @@ public final class App {
         action.setRequired(true);
         options.addOption(action);
 
-        Option networkName = new Option("n", "network", true, "network name");
-        options.addOption(networkName);
-        Option cidr = new Option("c", "cidr", true, "subnet cidr");
-        options.addOption(cidr);
-        Option instances = new Option("i", "instances", true, "instances number");
-        options.addOption(instances);
-        Option zones = new Option("z", "zones", true, "zone names");
-        options.addOption(zones);
-        Option memory = new Option("m", "memory", true, "memory amount");
-        options.addOption(memory);
-        Option disk = new Option("d", "disk", true, "disk space");
-        options.addOption(disk);
         Option networkIdOption = new Option("network_id", true, "network id");
         options.addOption(networkIdOption);
 
-        Option imageIdOption = new Option("image_id", true, "id of image for instance to use");
-        options.addOption(imageIdOption);
         Option imageFamilyOption = new Option("image_family", true, "name of the family for the image which is going to be created");
         options.addOption(imageFamilyOption);
         Option imageDiskIdOption = new Option("image_disk",  true, "disk id of disk from which image is going to be created");
@@ -198,37 +184,16 @@ public final class App {
         }
 
         String actionString = cmd.getOptionValue("action");
-        String network = "network1";
-        if (cmd.hasOption("network")) {
-            network = cmd.getOptionValue("network");
-        }
-        String[] cidrString = {"192.168.0.0/24", "192.168.1.0/24", "192.168.2.0/24"};
-        if (cmd.hasOption("cidr")) {
-            cidrString = cmd.getOptionValues("cidr");
-        }
-        String instancesNum = "3";
-        if (cmd.hasOption("instances")) {
-            instancesNum = cmd.getOptionValue("instances");
-        }
-        String[] zonesStrings = {Zone.RU_CENTRAL1_A.getId()};
-        if (cmd.hasOption("zones")) {
-            zonesStrings = cmd.getOptionValues("zone");
-        }
-        String memoryString = "1";
-        if (cmd.hasOption("memory")) {
-            memoryString = cmd.getOptionValue("memory");
-        }
-        String diskString = "10";
-        if (cmd.hasOption("disk")) {
-            diskString = cmd.getOptionValue("disk");
-        }
+        String network = (String) obj.get("network");
+        List<String> cidrString = (List<String>) obj.get("cidr");
+        String instancesNum = Integer.toString((Integer) obj.get("instances"));
+        List<String> zonesStrings = (List<String>) obj.get("zones");
+        String memoryString = Integer.toString((Integer) obj.get("memory"));
+        String diskString = Integer.toString((Integer) obj.get("disk"));
         String networkId = cmd.getOptionValue("network_id");
-        String imageId = cmd.getOptionValue("image_id");
+        String imageId = (String) obj.getOrDefault("image", null);
         String imageDiskId = cmd.getOptionValue("image_disk");
-        String imageFamily = "my-family";
-        if (cmd.hasOption("image_family")) {
-            imageFamily = cmd.getOptionValue("image_family");
-        }
+        String imageFamily = (String) obj.getOrDefault("image_family", "my-family");
 
         boolean withVpn = cmd.hasOption("with_vpn");
         String vpnZone = Zone.RU_CENTRAL1_A.getId();
@@ -248,9 +213,9 @@ public final class App {
             case ("setup"):
                 // IPv4 CIDR for every availability zone
                 Map<Zone, String> zoneToCidr = new HashMap<>();
-                zoneToCidr.put(Zone.RU_CENTRAL1_A, cidrString[0]);
-                zoneToCidr.put(Zone.RU_CENTRAL1_B, cidrString[1]);
-                zoneToCidr.put(Zone.RU_CENTRAL1_C, cidrString[2]);
+                zoneToCidr.put(Zone.RU_CENTRAL1_A, cidrString.get(0));
+                zoneToCidr.put(Zone.RU_CENTRAL1_B, cidrString.get(1));
+                zoneToCidr.put(Zone.RU_CENTRAL1_C, cidrString.get(2));
 
                 if (networkId == null) {
                     try {

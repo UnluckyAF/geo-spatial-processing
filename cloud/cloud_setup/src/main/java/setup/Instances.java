@@ -110,7 +110,7 @@ public class Instances {
         int instancesNum,
         String networkId,
         String imageId,
-        String[] zones,
+        List<String> zones,
         long memory,
         long disk,
         boolean withVpn,
@@ -138,9 +138,9 @@ public class Instances {
             }
         }
         int zone_ind = 0;
-        for (int i = 0; i < instancesNum; i++, zone_ind = (zone_ind + 1) % zones.length) {
+        for (int i = 0; i < instancesNum; i++, zone_ind = (zone_ind + 1) % zones.size()) {
             // Create instance
-            Subnet subnet = zoneToSubnet.get(zones[zone_ind]);
+            Subnet subnet = zoneToSubnet.get(zones.get(zone_ind));
             Operation createOperation = instanceService.create(buildCreateInstanceRequest(
                 imageId,
                 "myvm" + String.valueOf(i),
@@ -148,7 +148,7 @@ public class Instances {
                 subnet.getId(),
                 memory,
                 disk,
-                false
+                true //TODO: tmp for ssh
             ));
             System.out.println("Create instance request sent");
 
@@ -169,6 +169,9 @@ public class Instances {
                 System.exit(1);
             }
             System.out.println(String.format("Created with id %s", instanceId));
+
+            //TODO: remove
+            updateMetadata(instanceService, operationService, instanceId);
         }
 
         if (withVpn && vpnSubnet != null) {
@@ -316,7 +319,8 @@ public class Instances {
                 .setName(name)
                 .setZoneId(zoneId)
                 .setPlatformId(Platform.STANDARD_V2.getId())
-                .setResourcesSpec(ResourcesSpec.newBuilder().setCores(2).setCoreFraction(5).setMemory(memory * 1024 * 1024 * 1024))
+                // .setResourcesSpec(ResourcesSpec.newBuilder().setCores(2).setCoreFraction(5).setMemory(memory * 1024 * 1024 * 1024))
+                .setResourcesSpec(ResourcesSpec.newBuilder().setCores(4).setMemory(memory * 1024 * 1024 * 1024))
                 .setBootDiskSpec(AttachedDiskSpec.newBuilder()
                         .setDiskSpec(DiskSpec.newBuilder()
                                 .setImageId(imageId)

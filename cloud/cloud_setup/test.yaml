@@ -4,6 +4,9 @@ cidr:
   - "192.168.1.0/24"
   - "192.168.2.0/24"
 instances: 3
-zones: "ru-central1-a"
-memory: 1
-disk: 10
+zones:
+  - "ru-central1-a"
+memory: 4
+disk: 30
+image: fd8csfv29e0bl0giqdrd
+# image_family
