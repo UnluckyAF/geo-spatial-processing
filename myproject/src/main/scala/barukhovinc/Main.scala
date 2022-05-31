@@ -45,14 +45,17 @@ object  Main {
     // val output: String = "/Users/barukhov/geo_spatial_data/res"
     // val opName: String = "add"
     val otherArgs: Array[String] = Array[String]("2")
-    val input1: String = "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_176021_20211231_20220107_01_T2/LC08_L1GT_176021_20211231_20220107_01_T2_B2.TIF"
-    val input2: String = "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_176021_20211231_20220107_01_T2/LC08_L1GT_176021_20211231_20220107_01_T2_B3.TIF"
-    val input3: String = "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_176021_20211231_20220107_01_T2/LC08_L1GT_176021_20211231_20220107_01_T2_B4.TIF"
+    // val input1: String = "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_176021_20211231_20220107_01_T2/LC08_L1GT_176021_20211231_20220107_01_T2_B2.TIF"
+    // val input2: String = "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_176021_20211231_20220107_01_T2/LC08_L1GT_176021_20211231_20220107_01_T2_B3.TIF"
+    // val input3: String = "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_176021_20211231_20220107_01_T2/LC08_L1GT_176021_20211231_20220107_01_T2_B4.TIF"
+    val input1: String = "hdfs://master:9000/LC08_L1GT_176021_20211231_20220107_01_T2/LC08_L1GT_176021_20211231_20220107_01_T2/LC08_L1GT_176021_20211231_20220107_01_T2_B2.TIF"
+    val input2: String = "hdfs://master:9000/LC08_L1GT_176021_20211231_20220107_01_T2/LC08_L1GT_176021_20211231_20220107_01_T2/LC08_L1GT_176021_20211231_20220107_01_T2_B3.TIF"
+    val input3: String = "hdfs://master:9000/LC08_L1GT_176021_20211231_20220107_01_T2/LC08_L1GT_176021_20211231_20220107_01_T2/LC08_L1GT_176021_20211231_20220107_01_T2_B4.TIF"
     // val input1: String = "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_177022_20211120_20211130_01_T2/"
     // val prefix: String = "LC08_L1GT_177022_20211120_20211130_01_T2"
     // val input2: String = "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_177022_20211120_20211130_01_T2/LC08_L1GT_177022_20211120_20211130_01_T2_B2.TIF"
     // val input3: String = "file:/Users/barukhov/geo_spatial_data/LC08_L1GT_177022_20211120_20211130_01_T2/LC08_L1GT_177022_20211120_20211130_01_T2_B4.TIF"
-    val output: String = "/Users/barukhov/geo_spatial_data/res"
+    val output: String = "hdfs://master:9000/out"
     val opName: String = "spectest4"
     run(List[String](input1, input2, input3), output, opName, otherArgs)(Spark.context)
     // Spark.session.stop()
@@ -326,8 +329,8 @@ object  Main {
     val stitched = res.stitch()
 
     val geotiff = GeoTiff(stitched, res.metadata.crs)
-    geotiff.write(output + "_spark")
-    // val pathHadoop = new Path(output + "_spark")
+    val pathHadoop = new Path(output + "_spark")
+    geotiff.write(pathHadoop, res.sparkContext.hadoopConfiguration)
     // geotiff.write(pathHadoop, res.sparkContext.hadoopConfiguration)
   }
 
